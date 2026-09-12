@@ -1,0 +1,12 @@
+fastapi
+python-dotenv
+uvicorn[standard]
+pydantic
+qdrant-client==1.7.0
+requests
+psycopg2-binary
+langgraph
+langchain-core
+langchain-community
+langchain-openai
+kafka-python

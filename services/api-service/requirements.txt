@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic
+qdrant-client
+kafka-python
+psycopg2-binary
+sqlalchemy
+PyJWT

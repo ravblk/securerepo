@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+qdrant-client
+requests
+beautifulsoup4
+lxml
+# Для тестов Qdrant
+pandas
+tqdm

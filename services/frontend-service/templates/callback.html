@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureRepo - Вход</title>
+    <script>
+        async function handleCallback() {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+
+            if (code) {
+                try {
+                    // Обменять code на токен
+                    const response = await fetch('/auth/token', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({code, redirect_uri: window.location.origin + '/callback'})
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+
+                        // Debug: Check what we received
+                        console.log('Token data received:', data);
+                        console.log('Access token present:', !!data.access_token);
+                        console.log('Access token length:', data.access_token ? data.access_token.length : 0);
+
+                        // Store token
+                        localStorage.setItem('access_token', data.access_token);
+
+                        // Debug: Verify storage worked
+                        const storedToken = localStorage.getItem('access_token');
+                        console.log('Token stored in localStorage:', !!storedToken);
+                        console.log('Stored token length:', storedToken ? storedToken.length : 0);
+
+                        if (storedToken && storedToken.length > 0) {
+                            console.log('Redirecting to dashboard...');
+                            window.location.href = '/dashboard';
+                        } else {
+                            document.body.innerHTML = '<h1>Ошибка: токен не сохранен</h1><p>API вернул токен, но не удалось сохранить в localStorage</p><a href="/login">Попробовать снова</a>';
+                        }
+                    } else {
+                        const errorText = await response.text();
+                        console.error('Token exchange failed:', errorText);
+                        document.body.innerHTML = '<h1>Ошибка авторизации</h1><p>' + errorText + '</p><a href="/login">Попробовать снова</a>';
+                    }
+                } catch (error) {
+                    console.error('Error in callback:', error);
+                    document.body.innerHTML = '<h1>Ошибка обработки</h1><p>' + error.message + '</p><a href="/login">Попробовать снова</a>';
+                }
+            } else {
+                document.body.innerHTML = '<h1>Код авторизации не получен</h1><a href="/login">Попробовать снова</a>';
+            }
+        }
+        handleCallback();
+    </script>
+</head>
+<body>
+    <h1>Выполняется вход...</h1>
+</body>
+</html>

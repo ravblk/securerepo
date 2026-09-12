@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+qdrant-client==1.10.0
+requests
+GitPython
+tree-sitter==0.21.3
+tree-sitter-languages==1.10.2
+kafka-python

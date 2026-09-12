@@ -1,0 +1,90 @@
+openapi: 3.0.3
+info:
+  title: Embedding Service API
+  description: |
+    API для генерации эмбеддингов с универсальной моделью BAAI/bge-m3 (1024 dim):
+    - Код и текст
+    - Мультиязычный (100+ языков включая русский)
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: TEI сервер с BAAI/bge-m3
+
+paths:
+  /health:
+    get:
+      summary: Проверка здоровья сервиса
+      tags:
+        - System
+      responses:
+        '200':
+          description: Сервис работает
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  model:
+                    type: string
+                    description: Название модели на данном порту
+
+  /embed:
+    post:
+      summary: Генерация эмбеддингов (TEI-совместимый)
+      tags:
+        - Embeddings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inputs:
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items:
+                        type: string
+      responses:
+        '200':
+          description: Вектора
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  embeddings:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: number
+
+  /info:
+    get:
+      summary: Информация о модели
+      tags:
+        - Info
+      responses:
+        '200':
+          description: Информация о модели
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  model_id:
+                    type: string
+                  model_dtype:
+                    type: string
+                  model_num_parameters:
+                    type: integer
+                  max_seq_length:
+                    type: integer
+                  dimensions:
+                    type: integer

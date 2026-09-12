@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pydantic
+qdrant-client
+requests
+beautifulsoup4
+lxml

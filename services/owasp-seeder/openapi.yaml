@@ -1,0 +1,131 @@
+openapi: 3.0.3
+info:
+  title: OWASP Seeder API
+  description: API для загрузки OWASP Top 10 правил в Qdrant
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8004
+    description: Локальный сервер
+
+paths:
+  /health:
+    get:
+      summary: Проверка здоровья сервиса
+      tags:
+        - System
+      responses:
+        '200':
+          description: Сервис работает
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+
+  /seed/start:
+    post:
+      summary: Запуск загрузки OWASP правил в Qdrant
+      tags:
+        - Seed
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  description: Принудительная перезагрузка (перезапишет существующие)
+                  default: false
+      responses:
+        '202':
+          description: Загрузка запущена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seed_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: "started"
+
+  /seed/{seed_id}/status:
+    get:
+      summary: Статус загрузки
+      tags:
+        - Seed
+      parameters:
+        - name: seed_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Статус загрузки
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seed_id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [pending, running, completed, failed]
+                  pages_seeded:
+                    type: integer
+                  pages_failed:
+                    type: integer
+                  started_at:
+                    type: string
+                    format: date-time
+                  completed_at:
+                    type: string
+                    format: date-time
+                  error:
+                    type: string
+        '404':
+          description: Загрузка не найдена
+
+  /seed/history:
+    get:
+      summary: История загрузок
+      tags:
+        - Seed
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: История загрузок
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        seed_id:
+                          type: string
+                        status:
+                          type: string
+                        pages_seeded:
+                          type: integer
+                        started_at:
+                          type: string

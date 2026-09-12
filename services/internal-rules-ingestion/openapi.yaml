@@ -1,0 +1,132 @@
+openapi: 3.0.3
+info:
+  title: Confluence Ingestion API
+  description: API для синхронизации политик из Confluence
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8001
+    description: Локальный сервер
+
+paths:
+  /health:
+    get:
+      summary: Проверка здоровья сервиса
+      tags:
+        - System
+      responses:
+        '200':
+          description: Сервис работает
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+
+  /sync/start:
+    post:
+      summary: Запуск синхронизации политик из Confluence
+      tags:
+        - Sync
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                space_key:
+                  type: string
+                  description: Ключ пространства Confluence (опционально)
+                force:
+                  type: boolean
+                  description: Принудительная синхронизация
+                  default: false
+      responses:
+        '202':
+          description: Синхронизация запущена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sync_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: "started"
+
+  /sync/{sync_id}/status:
+    get:
+      summary: Статус синхронизации
+      tags:
+        - Sync
+      parameters:
+        - name: sync_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Статус синхронизации
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sync_id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [pending, running, completed, failed]
+                  pages_processed:
+                    type: integer
+                  pages_failed:
+                    type: integer
+                  started_at:
+                    type: string
+                    format: date-time
+                  completed_at:
+                    type: string
+                    format: date-time
+        '404':
+          description: Синхронизация не найдена
+
+  /sync/history:
+    get:
+      summary: История синхронизаций
+      tags:
+        - Sync
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: История синхронизаций
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sync_id:
+                          type: string
+                        status:
+                          type: string
+                        pages_processed:
+                          type: integer
+                        started_at:
+                          type: string

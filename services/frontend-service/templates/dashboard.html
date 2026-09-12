@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureRepo - Security Audit Platform</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        body.modal-open {
+            overflow: hidden;
+        }
+
+        .modal-bg {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: rgba(0, 0, 0, 0.9) !important;
+            display: none !important;
+            justify-content: center !important;
+            align-items: center !important;
+            z-index: 2147483647 !important;
+        }
+
+        .modal-bg.active {
+            display: flex !important;
+        }
+
+        .modal-content-wrapper {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            animation: modalIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-align: center;
+        }
+
+        .modal-content-wrapper h2 {
+            margin-top: 0;
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 30px;
+        }
+
+        .modal-content-wrapper .modal-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .modal-content-wrapper.lg {
+            max-width: 1100px;
+            max-height: 85vh;
+            overflow-y: auto;
+            text-align: left;
+        }
+
+        @keyframes modalIn {
+            from {
+                opacity: 0;
+                transform: scale(0.8) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .header .user {
+            font-size: 14px;
+            font-weight: 500;
+            color: rgba(255,255,255,0.9);
+        }
+
+        .header .logout {
+            color: white;
+            text-decoration: none;
+            margin-left: 15px;
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .header .logout:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 30px auto;
+            padding: 0 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 1200px;
+            text-align: center;
+        }
+
+        .card h2 {
+            margin: 0 0 30px 0;
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .card-header h2 {
+            margin: 0;
+            flex: 0 1 auto;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn-secondary {
+            background: rgba(107, 114, 128, 0.8);
+            box-shadow: 0 4px 15px rgba(107, 114, 128, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(107, 114, 128, 0.9);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(107, 114, 128, 0.4);
+        }
+
+        .form-group { margin-bottom: 20px; }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            font-size: 14px;
+            background: rgba(0,0,0,0.3);
+            color: #ffffff;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .form-group select option {
+            background: #1a1a2e;
+            color: #ffffff;
+        }
+
+        .audit-list {
+            margin-top: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+            width: 100%;
+        }
+
+        .audit-item {
+            background: rgba(255,255,255,0.03);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 25px 35px;
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            flex-direction: row; /* Выстраиваем в одну линию */
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        .audit-item.clickable {
+            cursor: pointer;
+        }
+
+        .audit-item.clickable:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(102, 126, 234, 0.7);
+            transform: translateY(-12px) scale(1.03);
+            box-shadow: 0 20px 50px rgba(102, 126, 234, 0.5);
+        }
+
+        .audit-item .info {
+            display: flex;
+            flex-direction: row; /* Выстраиваем заголовки внутри info в одну линию */
+            align-items: center;
+            gap: 20px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .audit-item .info h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .audit-item .info p {
+            margin: 0;
+            color: #a0a0a0;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .audit-item .status {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+
+        .status-pending {
+            background: rgba(253, 230, 138, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(253, 230, 138, 0.3);
+        }
+
+        .status-running {
+            background: rgba(191, 219, 254, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(191, 219, 254, 0.3);
+        }
+
+        .status-completed {
+            background: rgba(167, 243, 208, 0.2);
+            color: #34d399;
+            border: 1px solid rgba(167, 243, 208, 0.3);
+        }
+
+        .status-failed {
+            background: rgba(251, 146, 146, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(251, 146, 146, 0.3);
+        }
+
+        .status-critical {
+            background: rgba(251, 113, 133, 0.25);
+            color: #f472b6;
+            border: 2px solid #ef4444;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+            animation: pulse-critical 2s infinite;
+        }
+
+        .status-high {
+            background: rgba(251, 191, 36, 0.25);
+            color: #fbbf24;
+            border: 2px solid #f59e0b;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+        }
+
+        .status-medium {
+            background: rgba(59, 130, 246, 0.25);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.5);
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+        }
+
+        .status-low {
+            background: rgba(139, 92, 246, 0.25);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.5);
+            box-shadow: 0 0 8px rgba(139, 92, 246, 0.2);
+        }
+
+        @keyframes pulse-critical {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        /* Детали отчёта в одну линию */
+        .report-details {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px 40px;
+            margin-bottom: 30px;
+            padding-bottom: 25px;
+            border-bottom: 2px solid rgba(255,255,255,0.1);
+            text-align: center;
+        }
+
+        .report-details p {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #e0e0e0;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .report-details strong {
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .report-findings {
+            max-height: 600px;
+            overflow-y: auto;
+            padding-right: 20px;
+            padding-left: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 25px;
+        }
+
+        .report-findings h3 {
+            text-align: center;
+            margin-top: 0;
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 40px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            justify-content: center !important;
+            align-items: center !important;
+            z-index: 2147483647 !important;
+        }
+
+        .modal.active {
+            display: flex !important;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-content.lg {
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 30px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .report-findings::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .report-findings::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+        }
+
+        .report-findings::-webkit-scrollbar-thumb {
+            background: rgba(102, 126, 234, 0.5);
+            border-radius: 4px;
+        }
+
+        .severity-section {
+            margin-bottom: 40px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 30px;
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 25px;
+        }
+
+        .severity-section:last-child {
+            border-bottom: none;
+        }
+
+        .severity-section h4 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+
+        .finding-item {
+            padding: 25px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .finding-item:hover {
+            background: rgba(255,255,255,0.08);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+        }
+
+        .finding-critical {
+            border-left: 5px solid #ef4444;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
+        }
+
+        .finding-high {
+            border-left: 5px solid #f59e0b;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+        }
+
+        .finding-medium {
+            border-left: 5px solid #3b82f6;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+        }
+
+        .finding-low {
+            border-left: 5px solid #8b5cf6;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%);
+        }
+
+        .finding-info {
+            border-left: 5px solid #6b7280;
+            background: linear-gradient(135deg, rgba(107, 114, 128, 0.1) 0%, rgba(107, 114, 128, 0.05) 100%);
+        }
+
+        /* Заголовок находки (статус, сообщение, файл) в одну линию */
+        .finding-header {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            gap: 15px;
+            flex-wrap: wrap; /* Перенос на новую линию при нехватке места */
+        }
+
+        .finding-header .status {
+            flex-shrink: 0;
+        }
+
+        .finding-header .finding-message {
+            margin: 0;
+            flex: 1;
+            min-width: 200px;
+            font-weight: 600;
+            color: #ffffff;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        .finding-header .file-path {
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+
+        .finding-details {
+            font-size: 13px;
+            color: #a0a0a0;
+            margin-top: 15px;
+        }
+
+        .code-snippet {
+            background: rgba(0,0,0,0.5);
+            color: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .fix-suggestion {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        .fix-suggestion strong {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .rule-links {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        .rule-links strong {
+            color: #6366f1;
+            font-weight: 600;
+        }
+
+        .rule-link {
+            color: #6366f1;
+            text-decoration: none;
+            font-weight: 500;
+            display: inline-block;
+            margin: 5px 0;
+            transition: color 0.3s ease;
+        }
+
+        .rule-link:hover {
+            color: #818cf8;
+            text-decoration: underline;
+        }
+
+        .no-findings {
+            padding: 40px;
+            text-align: center;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+            border-radius: 12px;
+            color: #10b981;
+            font-size: 18px;
+            font-weight: 600;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #a0a0a0;
+            font-size: 16px;
+        }
+
+        .file-path {
+            font-size: 12px;
+            color: #6b7280;
+            background: rgba(0,0,0,0.3);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-family: 'Fira Code', monospace;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                padding: 15px 20px;
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .container {
+                padding: 0 15px;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .modal-content.lg {
+                max-width: 95%;
+            }
+
+            .audit-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .audit-item .info {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+                width: 100%;
+            }
+
+            .report-details {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .finding-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .finding-header .file-path {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔒 SecureRepo</h1>
+        <div>
+            <span class="user" id="userInfo">Загрузка...</span>
+            <a href="/login" class="logout">Выйти</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2>🚀 Безопасность репозиториев</h2>
+                <button class="btn" onclick="openNewAuditModal()">➕ Новый аудит</button>
+            </div>
+
+            <div class="audit-list" id="auditList">
+                <p>Загрузка аудитов...</p>
+            </div>
+        </div>
+    </div>
+
+<div class="modal-bg" id="newAuditModal">
+    <div class="modal-content-wrapper">
+        <h2>🎯 Запуск аудита</h2>
+        <form id="auditForm">
+            <div class="form-group">
+                <label>📂 URL репозитория</label>
+                <input type="text" name="repo_url" placeholder="https://github.com/user/repo" required>
+            </div>
+            <div class="form-group">
+                <label>🌿 Ветка</label>
+                <input type="text" name="branch" value="main">
+            </div>
+            <div class="form-group">
+                <label>💻 Язык программирования</label>
+                <select name="lang">
+                    <option value="python">Python</option>
+                    <option value="go">Go</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="typescript">TypeScript</option>
+                    <option value="java">Java</option>
+                    <option value="all">Все языки</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">❌ Отмена</button>
+                <button type="submit" class="btn">🔥 Запустить аудит</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-bg" id="reportModal">
+    <div class="modal-content-wrapper lg">
+        <div id="reportContent">
+            <div class="loading">⏳ Загрузка отчёта...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+        const API_URL = "{{API_URL}}";
+
+        function getToken() {
+            return localStorage.getItem('access_token');
+        }
+
+        function getUserInfo() {
+            const token = getToken();
+            console.log('getUserInfo called, token exists:', !!token);
+
+            if (!token) {
+                console.error('❌ No token found in getUserInfo');
+                return null;
+            }
+
+            try {
+                const parts = token.split('.');
+                console.log('🔍 Token parts count:', parts.length);
+
+                if (parts.length !== 3) {
+                    console.error('❌ Invalid token format, expected 3 parts but got:', parts.length);
+                    return null;
+                }
+
+                const payload = parts[1];
+                console.log('🔍 Payload length:', payload.length);
+
+                const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+                const padding = 4 - base64.length % 4;
+                const paddedBase64 = base64 + (padding !== 4 ? '='.repeat(padding) : '');
+
+                console.log('✅ Base64URL to Base64 conversion done');
+
+                const decoded = atob(paddedBase64);
+                const payload_data = JSON.parse(decoded);
+
+                console.log('✅ Successfully decoded and parsed JWT payload');
+                console.log('📋 User ID (sub):', payload_data.sub);
+
+                if (!payload_data.sub) {
+                    console.error('❌ Token payload missing "sub" field');
+                    return null;
+                }
+
+                const userInfo = {
+                    sub: payload_data.sub,
+                    roles: payload_data.realm_access?.roles || []
+                };
+
+                console.log('✅ User info successfully extracted:', userInfo);
+                return userInfo;
+            } catch (e) {
+                console.error('❌ Error parsing token:', e);
+                console.error('Error details:', e.message);
+                return null;
+            }
+        }
+
+        let currentUser = null;
+
+        async function loadAudits() {
+            const token = getToken();
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/audits', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+
+                const list = document.getElementById('auditList');
+                if (!data.items || data.items.length === 0) {
+                    list.innerHTML = '<p>Нет аудитов. Создайте первый аудит 🎯</p>';
+                    return;
+                }
+
+                list.innerHTML = data.items.map(audit => `
+                    <div class="audit-item ${audit.status === 'completed' ? 'clickable' : ''}" ${audit.status === 'completed' ? `onclick="viewAudit('${audit.audit_id}')"` : ''}>
+                        <div class="info">
+                            <h3>📂 ${audit.repo_url}</h3>
+                            <p>📅 ${new Date(audit.created_at).toLocaleString()}</p>
+                        </div>
+                        <span class="status status-${audit.status}">
+                            ${audit.status === 'completed' ? `${audit.status} 👁️` : audit.status}
+                        </span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error(e);
+                document.getElementById('auditList').innerHTML = '<p>❌ Ошибка загрузки аудитов</p>';
+            }
+        }
+
+        function openNewAuditModal() {
+            document.getElementById('newAuditModal').classList.add('active');
+        }
+
+        function closeModal() {
+            const newAuditModal = document.getElementById('newAuditModal');
+            newAuditModal.classList.remove('active');
+            newAuditModal.style.display = 'none';
+        }
+
+        document.getElementById('auditForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const token = getToken();
+
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/audits/start', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        repo_url: formData.get('repo_url'),
+                        branch: formData.get('branch'),
+                        lang: formData.get('lang')
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    closeModal();
+                    loadAudits();
+                } else {
+                    alert('❌ Ошибка: ' + (data.detail || 'Неизвестная ошибка'));
+                }
+            } catch (e) {
+                alert('❌ Ошибка запуска аудита');
+            }
+        });
+
+        /**
+         * Генерирует правильный URL к файлу в репозитории
+         * 
+         * @param {string} repoUrl - URL репозитория (например, https://github.com/ravblk/auth)
+         * @param {string} branch - Ветка репозитория (например, main, master, dev)
+         * @param {string} filePath - Локальный путь к файлу (например, /tmp/repos/UUID/internal/services/users/users.go)
+         * @returns {string} - Готовый URL
+         */
+        function generateRepositoryUrl(repoUrl, branch, filePath) {
+            if (!repoUrl || !filePath || !branch) return '';
+        
+            // Удаляем локальную часть пути /tmp/repos/<uuid>/
+            // Регулярка ищет начало пути /tmp/repos/ и следующую за ним папку (UUID), оставляя только путь внутри репозитория
+            const cleanFilePath = filePath.replace(/^\/tmp\/repos\/[^\/]+\//, '').replace(/^\//, '');
+        
+            try {
+                const url = new URL(repoUrl);
+                const cleanBasePath = url.pathname.replace(/\/+$/, ''); // Убираем trailing slash
+        
+                if (url.hostname.includes('gitlab.com')) {
+                    // GitLab формат
+                    url.pathname = `${cleanBasePath}/-/blob/${branch}/${cleanFilePath}`;
+                } else {
+                    // По умолчанию GitHub формат (работает и для других сервисов)
+                    url.pathname = `${cleanBasePath}/blob/${branch}/${cleanFilePath}`;
+                }
+        
+                return url.toString();
+            } catch (e) {
+                // Fallback: простой формат, если URL некорректный
+                const cleanRepoUrl = repoUrl.replace(/\/+$/, '');
+                if (repoUrl.includes('gitlab.com')) {
+                    return `${cleanRepoUrl}/-/blob/${branch}/${cleanFilePath}`;
+                }
+                return `${cleanRepoUrl}/blob/${branch}/${cleanFilePath}`;
+            }
+        }
+
+        async function viewAudit(auditId) {
+            const token = getToken();
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            try {
+                const reportModal = document.getElementById('reportModal');
+                const reportContent = document.getElementById('reportContent');
+                reportContent.innerHTML = '<div class="loading">⏳ Загрузка отчёта аудита...</div>';
+
+                reportModal.classList.add('active');
+
+                const statusResponse = await fetch(`/api/audits/${auditId}/status`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!statusResponse.ok) {
+                    throw new Error(`Ошибка получения статуса: ${statusResponse.status}`);
+                }
+
+                const statusData = await statusResponse.json();
+
+                // Сохраняем repo_url для генерации ссылок
+                window.currentRepoUrl = statusData.repo_url;
+
+                if (statusData.status !== 'completed') {
+                    const statusMessages = {
+                        'running': '🔄 Аудит выполняется',
+                        'pending': '⏳ Аудит ожидает запуска',
+                        'failed': '❌ Аудит завершился с ошибкой'
+                    };
+
+                    reportContent.innerHTML = `
+                        <h2>📊 Статус аудита</h2>
+                        <div class="report-details">
+                            <p><strong>🆔 Идентификатор:</strong> ${auditId}</p>
+                            <p><strong>📂 Репозиторий:</strong> ${statusData.repo_url}</p>
+                            <p><strong>📊 Статус:</strong> <span class="status status-${statusData.status}">${statusData.status}</span></p>
+                            <p><strong>📅 Создан:</strong> ${new Date(statusData.created_at).toLocaleString()}</p>
+                        </div>
+                        <div style="text-align: center; padding: 20px;">
+                            <h3>${statusMessages[statusData.status] || statusData.status}</h3>
+                            <p style="color: #a0a0a0;">Отчёт будет доступен после завершения аудита</p>
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn btn-secondary" onclick="closeReportModal()">❌ Закрыть</button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const reportResponse = await fetch(`/api/audits/${auditId}/report`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!reportResponse.ok) {
+                    throw new Error(`Ошибка получения отчёта: ${reportResponse.status}`);
+                }
+
+                const reportData = await reportResponse.json();
+
+                showAuditReport(auditId, statusData, reportData);
+
+            } catch (e) {
+                console.error('Error loading audit report:', e);
+                const reportModal = document.getElementById('reportModal');
+                const reportContent = document.getElementById('reportContent');
+
+                reportContent.innerHTML = `
+                    <h2>❌ Ошибка загрузки</h2>
+                    <div style="text-align: center; padding: 20px;">
+                        <p>Не удалось загрузить данные аудита</p>
+                        <p style="color: #a0a0a0; font-size: 14px;">${escapeHtml(e.message || 'Неизвестная ошибка')}</p>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" onclick="closeReportModal()">❌ Закрыть</button>
+                    </div>
+                `;
+            }
+        }
+
+        function showAuditReport(auditId, statusData, reportData) {
+            console.log('Showing audit report:', reportData);
+
+            const reportModal = document.getElementById('reportModal');
+            const reportContent = document.getElementById('reportContent');
+
+            let findings = [];
+
+            if (reportData.findings && Array.isArray(reportData.findings)) {
+                findings = reportData.findings;
+                console.log(`✅ Got ${findings.length} findings from reportData.findings`);
+            }
+            else if (reportData.results && Array.isArray(reportData.results)) {
+                reportData.results.forEach(chunk => {
+                    if (chunk.findings && Array.isArray(chunk.findings)) {
+                        chunk.findings.forEach(violation => {
+                            findings.push({
+                                ...violation,
+                                file_path: violation.file_path || chunk.file_path
+                            });
+                        });
+                    }
+                });
+                console.log(`✅ Got ${findings.length} findings from reportData.results (transformed)`);
+            }
+
+            let reportHtml = `
+                <h2>📊 Отчёт аудита</h2>
+                <div class="report-details">
+                    <p><strong>🆔 Идентификатор:</strong> ${auditId}</p>
+                    <p><strong>📂 Репозиторий:</strong> ${statusData.repo_url}</p>
+                    <p><strong>📊 Статус:</strong> <span class="status status-${statusData.status}">${statusData.status}</span></p>
+                    <p><strong>📅 Создан:</strong> ${new Date(statusData.created_at).toLocaleString()}</p>
+                    <p><strong>🔍 Всего находок:</strong> ${findings.length}</p>
+                </div>
+                <div class="report-findings">
+                    <h3>🎯 Результаты проверки:</h3>
+            `;
+
+            if (findings.length > 0) {
+                const findingsBySeverity = {
+                    critical: findings.filter(f => f.severity?.toLowerCase() === 'critical'),
+                    high: findings.filter(f => f.severity?.toLowerCase() === 'high'),
+                    medium: findings.filter(f => f.severity?.toLowerCase() === 'medium'),
+                    low: findings.filter(f => f.severity?.toLowerCase() === 'low'),
+                    info: findings.filter(f => !f.severity || f.severity?.toLowerCase() === 'info')
+                };
+
+                const severityOrdering = ['critical', 'high', 'medium', 'low', 'info'];
+
+                for (const severity of severityOrdering) {
+                    const severityFindings = findingsBySeverity[severity];
+                    if (severityFindings && severityFindings.length > 0) {
+                        reportHtml += `<div class="severity-section severity-${severity}">
+                            <h4>${severity.charAt(0).toUpperCase() + severity.slice(1)} (${severityFindings.length})</h4>`;
+                        severityFindings.forEach(finding => {
+                            const severityClass = `finding-${finding.severity?.toLowerCase() || 'info'}`;
+                            reportHtml += `
+                                <div class="finding-item ${severityClass}">
+                                    <div class="finding-header">
+                                        <span class="status status-${finding.severity?.toLowerCase() || 'info'}">${finding.severity || 'Info'}</span>
+                                        <div class="finding-message">${finding.message || finding.explanation || '🔍 Сообщение проблемы'}</div>
+                                        ${finding.file_path ? `<span class="file-path">${finding.file_path}${finding.line_number ? `:${finding.line_number}` : ''}</span>` : ''}
+                                    </div>
+
+                                    ${finding.code_snippet || finding.vulnerable_line ? `
+                                    <div class="finding-details">
+                                        <div class="code-snippet">${escapeHtml(finding.code_snippet || finding.vulnerable_line)}</div>
+                                    </div>` : ''}
+
+                                    ${finding.fix_suggestion ? `
+                                    <div class="fix-suggestion">
+                                        <strong>💡 Рекомендация:</strong> ${escapeHtml(finding.fix_suggestion)}
+                                    </div>` : ''}
+
+                                    ${finding.rule_id || finding.rule_url || finding.file_path ? `
+                                    <div class="rule-links">
+                                        ${finding.rule_id ? `<strong>📋 Правило:</strong> ${escapeHtml(finding.rule_id)}<br>` : ''}
+                                        ${finding.rule_url ? `<a href="${escapeHtml(finding.rule_url)}" target="_blank" class="rule-link">🌐 Внешний источник правила</a><br>` : ''}
+                                        ${finding.file_path ? (() => {
+                                            const fileUrl = generateRepositoryUrl(window.currentRepoUrl || '', window.branch || 'main', finding.file_path);
+                                            return fileUrl ? `<a href="${escapeHtml(fileUrl)}" target="_blank" class="rule-link">📂 Исходный файл: ${escapeHtml(finding.file_path)}</a>` : '';
+                                        })() : ''}
+                                    </div>` : ''}
+
+                                    ${finding.description || finding.explanation ? `
+                                    <div class="finding-details">
+                                        <strong>📝 Описание:</strong> ${escapeHtml(finding.description || finding.explanation)}
+                                    </div>` : ''}
+                                </div>
+                            `;
+                        });
+                        reportHtml += `</div>`;
+                    }
+                }
+            } else {
+                reportHtml += `<p class="no-findings">✅ Нет найденных проблем безопасности</p>`;
+            }
+
+            reportHtml += `
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="downloadReport('${auditId}', '${escapeHtml(statusData.repo_url)}')">📥 Скачать JSON</button>
+                    <button class="btn btn-secondary" onclick="closeReportModal()">❌ Закрыть</button>
+                </div>
+            `;
+
+            reportContent.innerHTML = reportHtml;
+            reportModal.classList.add('active');
+
+            window.currentReportData = { auditId, statusData, reportData, findings };
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function downloadReport(auditId, repoUrl) {
+            if (!window.currentReportData) {
+                alert('Отчёт недоступен для скачивания');
+                return;
+            }
+
+            const { statusData, reportData, findings } = window.currentReportData;
+            const report = {
+                audit_id: auditId,
+                repo_url: repoUrl,
+                status: statusData.status,
+                created_at: statusData.created_at,
+                total_findings: findings?.length || 0,
+                findings: findings || [],
+                raw_api_response: reportData,
+                generated_at: new Date().toISOString()
+            };
+
+            const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `audit-report-${auditId}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function closeReportModal() {
+            const reportModal = document.getElementById('reportModal');
+            reportModal.classList.remove('active');
+            reportModal.style.display = 'none';
+        }
+
+        console.log('Dashboard initialization...');
+        const token = getToken();
+        console.log('Token from localStorage:', !!token);
+        console.log('Token length:', token ? token.length : 0);
+        console.log('Token first 50 chars:', token ? token.substring(0, 50) : 'null');
+
+        const user = getUserInfo();
+        console.log('User info result:', user);
+
+        if (!user) {
+            console.error('No user info found, redirecting to login');
+            try {
+                const parts = token.split('.');
+                console.log('Token parts:', parts.length);
+                if (parts.length >= 2) {
+                    const payload = parts[1];
+                    console.log('Payload first 50 chars:', payload.substring(0, 50));
+
+                    try {
+                        const decoded1 = atob(payload.substring(0, 50));
+                        console.log('Partial decode attempt 1:', decoded1);
+                    } catch(e) {
+                        console.log('Decode attempt 1 failed:', e.message);
+                    }
+
+                    try {
+                        const padding = 4 - payload.length % 4;
+                        const paddedPayload = payload + (padding !== 4 ? '='.repeat(padding) : '');
+                        const decoded2 = atob(paddedPayload.substring(0, 50));
+                        console.log('Partial decode attempt 2 (with padding):', decoded2);
+                    } catch(e) {
+                        console.log('Decode attempt 2 (with padding) failed:', e.message);
+                    }
+                }
+            } catch(e) {
+                console.log('Error during token analysis:', e);
+            }
+
+            document.body.innerHTML = '<h1>❌ Ошибка авторизации</h1><p>Не удалось получить информацию пользователя из токена</p>' +
+                '<p>Token: ' + (token ? token.substring(0, 50) + '...' : 'null') + '</p>' +
+                '<p>Проверьте консоль браузера (F12) для детальной информации</p>' +
+                '<a href="/login">Перейти на страницу входа</a>';
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 10000);
+        } else {
+            console.log('User authorized:', user.sub);
+            currentUser = user;
+            document.getElementById('userInfo').textContent = user.sub;
+            loadAudits();
+        }
+    </script>
+</body>
+</html>

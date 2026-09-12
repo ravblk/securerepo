@@ -1,0 +1,29 @@
+openapi: 3.0.3
+info:
+  title: Audit Worker API
+  description: API для управления воркерами аудита
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8003
+    description: Локальный сервер
+
+paths:
+  /health:
+    get:
+      summary: Проверка здоровья сервиса
+      tags:
+        - System
+      responses:
+        '200':
+          description: Сервис работает
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  worker_id:
+                    type: string

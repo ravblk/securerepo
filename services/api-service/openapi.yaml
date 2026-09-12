@@ -1,0 +1,234 @@
+openapi: 3.0.3
+info:
+  title: SecureRepo Batch Auditor API
+  description: API для запуска и мониторинга аудитов безопасности
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Локальный сервер
+
+paths:
+  /health:
+    get:
+      summary: Проверка здоровья сервиса
+      tags:
+        - System
+      responses:
+        '200':
+          description: Сервис работает
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+
+  /audit/start:
+    post:
+      summary: Запуск аудита репозитория
+      tags:
+        - Audit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - repo_url
+              properties:
+                repo_url:
+                  type: string
+                  description: URL Git-репозитория
+                  example: "https://github.com/example/repo"
+                token:
+                  type: string
+                  description: token Git-репозитория
+                  example: "123"
+                branch:
+                  type: string
+                  description: Ветка для аудита (по умолчанию main)
+                  default: "main"
+                language:
+                  type: string
+                  description: Язык программирования
+                  enum: [python, go, all]
+                  default: "all"
+      responses:
+        '202':
+          description: Аудит запущен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audit_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: "started"
+                  message:
+                    type: string
+        '400':
+          description: Некорректный запрос
+        '500':
+          description: Ошибка сервера
+
+  /audit/{audit_id}/status:
+    get:
+      summary: Получение статуса аудита
+      tags:
+        - Audit
+      parameters:
+        - name: audit_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Статус аудита
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audit_id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [pending, running, completed, failed]
+                  progress:
+                    type: object
+                    properties:
+                      total_chunks:
+                        type: integer
+                      processed_chunks:
+                        type: integer
+                      failed_chunks:
+                        type: integer
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+        '404':
+          description: Аудит не найден
+
+  /audit/{audit_id}/report:
+    get:
+      summary: Скачивание отчёта
+      tags:
+        - Audit
+      parameters:
+        - name: audit_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: format:
+          in: query
+          schema:
+            type: string
+            enum: [json, pdf]
+            default: json
+      responses:
+        '200':
+          description: Отчёт аудита
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audit_id:
+                    type: string
+                  summary:
+                    type: object
+                    properties:
+                      total_issues:
+                        type: integer
+                      critical:
+                        type: integer
+                      high:
+                        type: integer
+                      medium:
+                        type: integer
+                      low:
+                        type: integer
+                  issues:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        title:
+                          type: string
+                        severity:
+                          type: string
+                        file_path:
+                          type: string
+                        line:
+                          type: integer
+                        description:
+                          type: string
+                        rule_id:
+                          type: string
+                        cwe_id:
+                          type: string
+        '202':
+          description: Аудит ещё выполняется
+        '404':
+          description: Аудит не найден
+
+  /audit:
+    get:
+      summary: Список всех аудитов
+      tags:
+        - Audit
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, running, completed, failed]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: offset:
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Список аудитов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        audit_id:
+                          type: string
+                        repo_url:
+                          type: string
+                        status:
+                          type: string
+                        created_at:
+                          type: string
+                  total:
+                    type: integer
