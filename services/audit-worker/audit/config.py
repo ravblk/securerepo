@@ -42,5 +42,11 @@ class Settings:
     max_retries: int = 3
     retry_delay_seconds: int = 5
 
+    # Langfuse Configuration
+    langfuse_public_key: str = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+    langfuse_secret_key: str = os.getenv("LANGFUSE_SECRET_KEY", "")
+    langfuse_host: str = os.getenv("LANGFUSE_HOST", "http://langfuse:3090")
+    langfuse_enabled: bool = bool(os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"))
+
 
 settings = Settings()

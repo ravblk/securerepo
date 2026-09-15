@@ -59,7 +59,7 @@ kubectl get namespaces | grep securerepo
 Создаем секреты с конфиденциальными данными:
 
 ```bash
-kubectl apply -f k8s/secrets/
+kubectl apply -f k8s/secrets-example/
 ```
 
 **Создаваемые секреты:**
@@ -101,15 +101,10 @@ kubectl apply -f k8s/02-keycloak.yaml
 
 #### 3.5 Ollama (LLM-сервер)
 
-```bash
-kubectl apply -f k8s/ollama.yaml
-```
-
 **Особенности Ollama:**
 - Модель: Qwen2.5-Coder-7B-Instruct (GGUF формат)
 - Требует GPU с 6GB+ VRAM
 - Предоставляет OpenAI-совместимый API
-
 
 ### 4. Развертывание core сервисов
 
@@ -162,10 +157,19 @@ kubectl apply -f k8s/09-owasp-seeder.yaml
 kubectl apply -f k8s/10-indexer-service.yaml
 ```
 
+#### 5.6 Langfuse
+
+```bash
+kubectl apply -f k8s/11-langfuse.yaml
+```
+
+Так же нужно создать БД для langfuse в Postgresql
+Создать клиента который будет подключаться к Langfuse из Audit Worker
+
 #### 5.6 Audit Worker
 
 ```bash
-kubectl apply -f k8s/11-audit-worker.yaml
+kubectl apply -f k8s/12-audit-worker.yaml
 ```
 
 **Важно:** Audit Worker зависит от Ollama для анализа кода.

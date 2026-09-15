@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
       - name: audit-worker
-        image: xravil/securerepo-audit-worker:v0.0.1
+        image: xravil/securerepo-audit-worker:v0.0.4
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
@@ -49,6 +49,18 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: POSTGRES_URL
+        - name: LANGFUSE_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: langfuse-secrets
+              key: SECUREREPO_PUBLIC_KEY
+        - name: LANGFUSE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: langfuse-secrets
+              key: SECUREREPO_SECRET_KEY
+        - name: LANGFUSE_HOST
+          value: "http://langfuse:3090"
         resources:
           requests:
             cpu: 250m

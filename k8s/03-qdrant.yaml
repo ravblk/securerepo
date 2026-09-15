@@ -19,7 +19,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 20Gi
+      storage: 4Gi
 ---
 # Qdrant Deployment
 apiVersion: apps/v1

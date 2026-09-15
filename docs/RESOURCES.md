@@ -22,8 +22,9 @@
 | Keycloak | 1 | 250m | 512Mi | 1 | 2Gi | 5Gi |
 | Qdrant | 1 | 250m | 512Mi | 1 | 2Gi | 20Gi |
 | Kafka | 1 | 250m | 512Mi | 2 | 4Gi | 10Gi |
+| Langfuse | 1 | 250m | 512Mi | 500m | 1Gi | Shared with PostgreSQL |
 
-**Infrastructure Total:** 1 core / 2Gi (requests) | 5 cores / 10Gi (limits)
+**Infrastructure Total:** 1.25 cores / 2.5Gi (requests) | 5.5 cores / 11Gi (limits)
 
 ### Application Services
 
@@ -35,21 +36,28 @@
 | Internal Rules Ingestion | 1 | 200m | 256Mi | 1 | 1Gi |
 | OWASP Seeder | 1 | 100m | 256Mi | 1 | 1Gi |
 | Indexer Service | 1 | 250m | 512Mi | 1 | 1Gi |
-| Audit Worker | 1 | 250m | 512Mi | 2 | 2Gi |
+| Audit Worker | 1 | 300m | 768Mi | 2.5 | 2.5Gi |
 
-**Applications Total:** 2.15 cores / 4.176Gi (requests) | 10.5 cores / 14.5Gi (limits)
+**Applications Total:** 2.2 cores / 4.432Gi (requests) | 11 cores / 15Gi (limits)
 
 ## Total Resource Summary
 
 ### Minimum Requirements (Requests Only)
-- **CPU:** 3.15 cores
-- **Memory:** 6.176Gi
-- **Storage:** 45Gi
+- **CPU:** 3.45 cores
+- **Memory:** 6.932Gi
+- **Storage:** 45Gi (PostgreSQL shared with main application and Langfuse)
 
 ### Maximum Requirements (Limits)
-- **CPU:** 15.5 cores
-- **Memory:** 24.5Gi
-- **Storage:** 45Gi
+- **CPU:** 16.5 cores
+- **Memory:** 26Gi
+- **Storage:** 45Gi (PostgreSQL shared with main application and Langfuse)
+
+### Langfuse Resource Impact
+Langfuse adds minimal overhead to the infrastructure:
+- **Additional CPU:** 250m (requests) | 500m (limits)
+- **Additional Memory:** 512Mi (requests) | 1Gi (limits)
+- **Storage:** Uses existing PostgreSQL (no additional storage required)
+- **Network:** Minimal overhead for trace data transmission
 
 ## Scaling Recommendations
 
@@ -58,6 +66,7 @@
 - **Frontend Service:** Scale to 2-3 replicas (current: 1)
 - **Audit Worker:** Scale to 2-4 replicas (current: 1)
 - **Embedding Service:** Consider horizontal scaling with load balancer
+- **Langfuse:** Scale to 2 replicas for HA with shared PostgreSQL
 
 ### High-Traffic Environment
 - Add Horizontal Pod Autoscaler (HPA) for:

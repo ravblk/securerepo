@@ -5,3 +5,4 @@ retrieval_results
 secrets
 docs/internal
 scripts
+docker-compose.yml

@@ -10,3 +10,6 @@ langchain-core
 langchain-community
 langchain-openai
 kafka-python
+langfuse
+langfuse-langchain
+langchain

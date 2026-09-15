@@ -12,12 +12,13 @@ from .qdrant_service import QdrantService
 from .embedding_service import EmbeddingService
 from .exceptions import WorkflowError
 from .models import AuditState
+from .langfuse_service import langfuse_service
 
 logger = logging.getLogger(__name__)
 
 
 class AuditWorkflow:
-    """LangGraph workflow for security audit processing."""
+    """LangGraph workflow for security audit processing with Langfuse tracing."""
 
     def __init__(
         self,
@@ -29,6 +30,7 @@ class AuditWorkflow:
         self._qdrant_service = qdrant_service
         self._embedding_service = embedding_service
         self._graph = self._build_workflow()
+        self._current_trace = None
 
     def _build_workflow(self) -> StateGraph:
         """Build the LangGraph state graph."""
@@ -68,6 +70,7 @@ class AuditWorkflow:
         embedding = state.get("code_embedding", [])
         code = state.get("code", "")
         lang = state.get("lang", "python")
+        audit_id = state.get("audit_id")
 
         if not embedding:
             return {"general_rules": []}
@@ -102,6 +105,18 @@ class AuditWorkflow:
             elif rules:
                 logger.warning(f"Rules is not a list: {type(rules)}")
 
+            # Log to Langfuse
+            if self._current_trace and audit_id:
+                langfuse_service.create_event(
+                    trace_id=self._current_trace.id,
+                    name="retrieve_general_rules",
+                    metadata={
+                        "rules_count": len(rules),
+                        "search_type": "hybrid" if rules else "semantic_fallback",
+                        "language": lang
+                    }
+                )
+
             return {"general_rules": rules}
         except Exception as e:
             # If hybrid search fails completely, fall back to semantic search
@@ -113,15 +128,42 @@ class AuditWorkflow:
                     limit=3
                 )
                 logger.info(f"Retrieved {len(rules)} general rules via fallback semantic search")
+
+                # Log failure to Langfuse
+                if self._current_trace and audit_id:
+                    langfuse_service.create_event(
+                        trace_id=self._current_trace.id,
+                        name="retrieve_general_rules",
+                        metadata={
+                            "rules_count": len(rules),
+                            "search_type": "semantic_fallback",
+                            "error": str(e),
+                            "language": lang
+                        }
+                    )
+
                 return {"general_rules": rules}
             except Exception as fallback_error:
                 logger.error(f"Both hybrid and semantic search failed: {fallback_error}")
+
+                # Log complete failure to Langfuse
+                if self._current_trace and audit_id:
+                    langfuse_service.create_event(
+                        trace_id=self._current_trace.id,
+                        name="retrieve_general_rules_failed",
+                        metadata={
+                            "error": str(fallback_error),
+                            "language": lang
+                        }
+                    )
+
                 return {"general_rules": []}
 
     def _retrieve_internal_rules(self, state: dict) -> dict:
         """Retrieve internal security policies from Qdrant using hybrid semantic + keyword search."""
         embedding = state.get("code_embedding", [])
         code = state.get("code", "")
+        audit_id = state.get("audit_id")
 
         if not embedding:
             return {"internal_rules": []}
@@ -154,6 +196,17 @@ class AuditWorkflow:
             elif rules:
                 logger.warning(f"Rules is not a list: {type(rules)}")
 
+            # Log to Langfuse
+            if self._current_trace and audit_id:
+                langfuse_service.create_event(
+                    trace_id=self._current_trace.id,
+                    name="retrieve_internal_rules",
+                    metadata={
+                        "rules_count": len(rules),
+                        "search_type": "hybrid" if rules else "semantic_fallback"
+                    }
+                )
+
             return {"internal_rules": rules}
         except Exception as e:
             # If hybrid search fails completely, fall back to semantic search
@@ -164,21 +217,58 @@ class AuditWorkflow:
                     limit=2
                 )
                 logger.info(f"Retrieved {len(rules)} internal rules via fallback semantic search")
+
+                # Log failure to Langfuse
+                if self._current_trace and audit_id:
+                    langfuse_service.create_event(
+                        trace_id=self._current_trace.id,
+                        name="retrieve_internal_rules",
+                        metadata={
+                            "rules_count": len(rules),
+                            "search_type": "semantic_fallback",
+                            "error": str(e)
+                        }
+                    )
+
                 return {"internal_rules": rules}
             except Exception as fallback_error:
                 logger.error(f"Both hybrid and semantic search failed: {fallback_error}")
+
+                # Log complete failure to Langfuse
+                if self._current_trace and audit_id:
+                    langfuse_service.create_event(
+                        trace_id=self._current_trace.id,
+                        name="retrieve_internal_rules_failed",
+                        metadata={
+                            "error": str(fallback_error)
+                        }
+                    )
+
                 return {"internal_rules": []}
 
     def _analyze_code(self, state: dict) -> dict:
-        """Analyze code using LLM with retrieved rules."""
+        """Analyze code using LLM with retrieved rules and Langfuse tracing."""
         code = state["code"]
         file_path = state["file_path"]
         lang = state.get("lang", "python")
         general_rules = state["general_rules"]
         internal_rules = state["internal_rules"]
+        audit_id = state.get("audit_id")
 
         if not general_rules and not internal_rules:
             logger.info("No rules found, returning empty violations")
+
+            # Log to Langfuse
+            if self._current_trace and audit_id:
+                langfuse_service.create_event(
+                    trace_id=self._current_trace.id,
+                    name="analyze_code",
+                    metadata={
+                        "result": "no_rules",
+                        "reason": "both general and internal rules empty"
+                    }
+                )
+
             return {"violations": [], "severity": "None"}
 
         # Format rules for LLM prompt (только rule_url)
@@ -262,6 +352,18 @@ class AuditWorkflow:
                 error_msg = f"Error in LLM analysis: {parse_error}"
                 logger.error(f"Raw LLM response: {response.content}")
                 logger.error(error_msg)
+
+                # Log failure to Langfuse
+                if self._current_trace and audit_id:
+                    langfuse_service.create_event(
+                        trace_id=self._current_trace.id,
+                        name="analyze_code_failed",
+                        metadata={
+                            "error": parse_error,
+                            "response_preview": response.content[:200]
+                        }
+                    )
+
                 raise WorkflowError(error_msg)
 
             # Determine maximum severity
@@ -275,6 +377,28 @@ class AuditWorkflow:
                 severity = max_sev.get("severity", "Low")
 
             logger.info(f"Code analysis completed: {len(violations)} violations, severity: {severity}")
+
+            # Log successful analysis to Langfuse
+            if self._current_trace and audit_id:
+                langfuse_service.create_event(
+                    trace_id=self._current_trace.id,
+                    name="analyze_code",
+                    metadata={
+                        "violations_count": len(violations),
+                        "severity": severity,
+                        "rules_used": len(updated_rules),
+                        "language": lang
+                    }
+                )
+
+                # Create score for security audit effectiveness
+                langfuse_service.create_score(
+                    trace_id=self._current_trace.id,
+                    name="security_violations",
+                    value=len(violations),
+                    comment=f"Found {len(violations)} security violations, max severity: {severity}"
+                )
+
             return {"violations": violations, "severity": severity}
 
         except Exception as e:
@@ -380,13 +504,43 @@ class AuditWorkflow:
         return {"violations": validated}
 
     def process(self, audit_task, initial_state: dict) -> tuple[list, Optional[str]]:
-        """Process audit task through the workflow."""
+        """Process audit task through the workflow with Langfuse tracing."""
+        audit_id = initial_state.get("audit_id", "unknown")
+
         try:
+            # Create Langfuse trace for this audit operation
+            self._current_trace = langfuse_service.create_trace(
+                name="security_audit_workflow",
+                session_id=audit_id,
+                metadata={
+                    "file_path": initial_state.get("file_path"),
+                    "language": initial_state.get("lang"),
+                    "chunk_id": initial_state.get("chunk_id")
+                }
+            )
+
+            # Execute workflow
             result = self._graph.invoke(initial_state)
             violations = result.get("violations", [])
             severity = result.get("severity")
+
+            # Finalize trace with results
+            if self._current_trace:
+                langfuse_service.flush()
+                self._current_trace = None
+
             return violations, severity
         except Exception as e:
+            # Log error to Langfuse if trace exists
+            if self._current_trace:
+                langfuse_service.create_event(
+                    trace_id=self._current_trace.id,
+                    name="workflow_error",
+                    metadata={"error": str(e)}
+                )
+                langfuse_service.flush()
+                self._current_trace = None
+
             raise WorkflowError(f"Workflow processing failed: {str(e)}")
 
     @property
