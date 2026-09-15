@@ -1,0 +1,100 @@
+---
+# API Service ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: securerepo
+data:
+  KAFKA_BROKER: "kafka:9092"
+  QDRANT_URL: "http://qdrant:6333"
+  KEYCLOAK_URL: "http://keycloak:8080"
+---
+# API Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: securerepo
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+  selector:
+    app: api
+---
+# API Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: securerepo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: api
+        image: xravil/securerepo-api-service:v0.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: api-config
+        env:
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: embedding-secret
+              key: HF_TOKEN
+        - name: POSTGRES_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_URL
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+---
+# API Service (LoadBalancer для внешнего доступа)
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-lb
+  namespace: securerepo
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8000        # Порт, на котором будет доступен API на localhost
+    targetPort: 8000  # Порт внутри контейнера API
+    name: http
+  selector:
+    app: api          # Убедитесь, что лейблы совпадают с лейблами в Deployment вашего API

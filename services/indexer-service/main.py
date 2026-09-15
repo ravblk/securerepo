@@ -26,33 +26,53 @@ def process_repo(message: RepoMessage) -> None:
     logger.info("Processing repo: %s (%s)", message.repo_url, message.lang)
 
     try:
+        logger.info(f"Cloning repo: {message.repo_url}")
         repo_path = clone_repo(message.repo_url, message.branch, message.token)
+        logger.info(f"Repo cloned successfully to: {repo_path}")
     except Exception:
         logger.exception("Error cloning repo")
         kafka_service.send_status(message.audit_id, "failed", error="clone failed")
         return
 
+    logger.info(f"Collecting code chunks from {repo_path}")
     chunks = collect_chunks(repo_path)
     logger.info("Found %d code chunks", len(chunks))
 
+    if not chunks:
+        logger.warning("No code chunks found, skipping embedding")
+        kafka_service.send_status(message.audit_id, "indexed", total_chunks=0)
+        return
+
+    logger.info(f"Starting embedding process for {len(chunks)} chunks")
     embedded: list[tuple] = []
-    for chunk in chunks:
+    for idx, chunk in enumerate(chunks):
+        logger.info(f"Processing chunk {idx + 1}/{len(chunks)}: {chunk.file_path}")
         embedding = get_embedding(chunk.code)
         if embedding:
             embedded.append((chunk, embedding))
+            logger.info(f"✓ Got embedding for chunk {idx + 1}")
+        else:
+            logger.warning(f"✗ Failed to get embedding for chunk {idx + 1}")
+
+    logger.info(f"Embedding complete: {len(embedded)}/{len(chunks)} chunks embedded")
 
     points = []
     if embedded:
         try:
+            logger.info(f"Upserting {len(embedded)} points to Qdrant")
             points = qdrant_service.upsert_chunks(embedded, message)
             logger.info("Indexed %d chunks to Qdrant", len(points))
         except Exception:
             logger.exception("Error upserting to Qdrant")
+    else:
+        logger.warning("No chunks were successfully embedded")
 
+    logger.info(f"Sending audit status for {message.audit_id}")
     kafka_service.send_status(
         message.audit_id, "indexed", total_chunks=len(points),
     )
     kafka_service.send_audit_tasks(message.audit_id, points)
+    logger.info(f"Completed processing for {message.audit_id}")
 
 
 def on_kafka_message(kafka_message) -> None:
@@ -63,11 +83,17 @@ def on_kafka_message(kafka_message) -> None:
     try:
         repo_message = RepoMessage(**kafka_message.value)
         logger.info(
-            "Processing repo: %s, audit_id: %s",
+            "Processing message for repo: %s, audit_id: %s",
             repo_message.repo_url, repo_message.audit_id,
         )
+
+        import time
+        start_time = time.time()
+
         process_repo(repo_message)
-        logger.info("Completed indexing for audit %s", repo_message.audit_id)
+
+        duration = time.time() - start_time
+        logger.info(f"Completed indexing for audit %s in {duration:.2f}s", repo_message.audit_id)
     except Exception:
         logger.exception("Error processing repo message")
 

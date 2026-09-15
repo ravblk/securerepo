@@ -4,7 +4,6 @@ from typing import Optional, List
 import requests
 
 from .config import settings
-from .retry_service import RetryService
 from .exceptions import EmbeddingServiceError
 
 logger = logging.getLogger(__name__)
@@ -15,24 +14,24 @@ class EmbeddingService:
 
     def __init__(self):
         self._url = f"{settings.embedding_url}/embed"
-        self._retry_service = RetryService()
 
     def get_embedding(self, text: str) -> Optional[List[float]]:
         """Get embedding for given text."""
-        def embed_func():
-            return requests.post(
+        try:
+            import time
+            start_time = time.time()
+
+            response = requests.post(
                 self._url,
                 json={"inputs": text},
                 timeout=settings.embedding_timeout,
             )
 
-        try:
-            response = self._retry_service.execute_with_retry(
-                embed_func,
-                name=f"POST {self._url[:80]}"
-            )
+            duration = time.time() - start_time
+            logger.info(f"Embedding request completed in {duration:.2f}s, text length: {len(text)}")
 
             response.raise_for_status()
+
             result = response.json()
             embeddings = result.get("embeddings", [])
 
@@ -43,8 +42,13 @@ class EmbeddingService:
             logger.error(error_msg)
             raise EmbeddingServiceError(error_msg)
 
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Embedding service request failed: {str(e)}"
+            logger.error(error_msg)
+            raise EmbeddingServiceError(error_msg)
+
         except Exception as e:
-            error_msg = f"Embedding service error: {e}"
+            error_msg = f"Embedding service error: {str(e)}"
             logger.error(error_msg)
             raise EmbeddingServiceError(error_msg)
 

@@ -1,0 +1,124 @@
+---
+# Keycloak ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-config
+  namespace: securerepo
+data:
+  KEYCLOAK_ADMIN: admin
+  KC_DB: dev-file
+  KC_HEALTH_ENABLED: "true"       # ДОБАВЛЕНО: Включает /health эндпоинты
+  KC_PROXY_HEADERS: "xforwarded"              # ДОБАВЛЕНО: Правильная работа за Ingress (HTTP)
+---
+# Keycloak Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-secret
+  namespace: securerepo
+type: Opaque
+data:
+  KEYCLOAK_ADMIN_PASSWORD: YWRtaW4=  # admin
+---
+# Keycloak PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: keycloak-pvc
+  namespace: securerepo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Keycloak Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: securerepo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:24.0
+        ports:
+        - containerPort: 8080
+          name: http
+        args: ["start-dev"]           # ИСПРАВЛЕНО: command заменен на args
+        envFrom:
+        - configMapRef:
+            name: keycloak-config
+        - secretRef:
+            name: keycloak-secret
+        volumeMounts:
+        - name: keycloak-storage
+          mountPath: /opt/keycloak/data/h2
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health/live        # ИСПРАВЛЕНО: правильный путь
+            port: 8080                # ИСПРАВЛЕНО: порт health-check
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready       # ИСПРАВЛЕНО: правильный путь
+            port: 8080                # ИСПРАВЛЕНО: порт health-check
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: keycloak-storage
+        persistentVolumeClaim:
+          claimName: keycloak-pvc
+---
+# Keycloak Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: securerepo
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  selector:
+    app: keycloak
+    
+# Keycloak Service (LoadBalancer для внешнего доступа)
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-lb
+  namespace: securerepo
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8180
+    targetPort: 8080
+    name: http
+  selector:
+    app: keycloak

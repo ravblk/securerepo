@@ -1,4 +1,4 @@
-FROM proxies-docker.pkg.sbercloud.tech/python:3.11-slim
+FROM python:3.11-slim
 
 LABEL maintainer="securerepo"
 LABEL description="Indexer Service"

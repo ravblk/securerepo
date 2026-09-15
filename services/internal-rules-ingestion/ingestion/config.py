@@ -18,7 +18,7 @@ class Settings:
 
     # Embedding Service Configuration
     embedding_url: str = os.getenv("EMBEDDING_URL", "http://embedding:8080")
-    embedding_timeout: int = 120
+    embedding_timeout: int = int(os.getenv("EMBEDDING_TIMEOUT", "180"))  # Increased from 120s
     text_limit: int = 10000
 
     # Content Source Configuration
@@ -32,7 +32,7 @@ class Settings:
     confluence_space_key: str = os.getenv("CONFLUENCE_SPACE_KEY", "")
 
     # Processing Configuration
-    max_workers: int = int(os.getenv("MAX_WORKERS", "8"))
+    max_workers: int = int(os.getenv("MAX_WORKERS", "1"))  # Single worker like owasp-seeder
 
     # Retry Configuration
     qdrant_max_retries: int = int(os.getenv("QDRANT_MAX_RETRIES", "5"))

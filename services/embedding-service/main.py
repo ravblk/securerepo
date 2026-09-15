@@ -51,8 +51,13 @@ def embed(request: EmbedRequest):
 
     inputs = request.inputs if isinstance(request.inputs, list) else [request.inputs]
 
+    import time
+    start_time = time.time()
     embeddings = model.encode(inputs, convert_to_numpy=True)
+    processing_time = time.time() - start_time
 
     result = embeddings.tolist()
+
+    print(f"Embedding processed: {len(inputs)} item(s), time: {processing_time:.2f}s, size: {len(result[0]) if result else 0}", flush=True)
 
     return {"embeddings": result}

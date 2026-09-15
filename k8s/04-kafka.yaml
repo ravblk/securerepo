@@ -1,0 +1,116 @@
+---
+# Kafka ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: securerepo
+data:
+  KAFKA_NODE_ID: "1"
+  KAFKA_PROCESS_ROLES: broker,controller
+  KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+  KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+  KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"  # ИСПРАВЛЕНО: kafka заменено на localhost
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+  KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+  KAFKA_LOG_DIRS: /var/lib/kafka/data
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+  KAFKA_LOG_RETENTION_HOURS: "168"
+  CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+---
+# Kafka PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kafka-pvc
+  namespace: securerepo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Kafka Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: securerepo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      # ДОБАВЛЕНО: Init-контейнер для выдачи прав пользователю kafka (UID 1000)
+      initContainers:
+      - name: volume-permissions
+        image: busybox
+        command: ["sh", "-c", "chown -R 1000:1000 /var/lib/kafka/data"]
+        volumeMounts:
+        - name: kafka-storage
+          mountPath: /var/lib/kafka/data
+      containers:
+      - name: kafka
+        image: apache/kafka:3.7.0
+        ports:
+        - containerPort: 9092
+        - containerPort: 9093
+        envFrom:
+        - configMapRef:
+            name: kafka-config
+        volumeMounts:
+        - name: kafka-storage
+          mountPath: /var/lib/kafka/data
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 2
+            memory: 4Gi
+        # ИЗМЕНЕНО: Используем легковесные tcpSocket вместо запуска JVM скриптов
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 20
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 5
+      volumes:
+      - name: kafka-storage
+        persistentVolumeClaim:
+          claimName: kafka-pvc
+---
+# Kafka Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: securerepo
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9092
+    targetPort: 9092
+    name: plaintext
+  - port: 9093
+    targetPort: 9093
+    name: controller
+  selector:
+    app: kafka

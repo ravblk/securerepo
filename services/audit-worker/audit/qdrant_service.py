@@ -29,6 +29,21 @@ class SecurityCategory(Enum):
     SESSION = "session"
 
 
+# Mapping from lowercase category keys to SecurityCategory enum values
+CATEGORY_KEY_TO_ENUM = {
+    "sql_injection": SecurityCategory.SQL_INJECTION,
+    "xss": SecurityCategory.XSS,
+    "code_injection": SecurityCategory.CODE_INJECTION,
+    "auth": SecurityCategory.AUTH,
+    "crypto": SecurityCategory.CRYPTO,
+    "input_validation": SecurityCategory.INPUT_VALIDATION,
+    "file_operations": SecurityCategory.FILE_OPERATIONS,
+    "network": SecurityCategory.NETWORK,
+    "data_handling": SecurityCategory.DATA_HANDLING,
+    "session": SecurityCategory.SESSION,
+}
+
+
 @dataclass
 class CodeAnalysisResult:
     """Result of code analysis for security-relevant keywords and patterns."""
@@ -226,7 +241,10 @@ class QdrantService:
             found_keywords = [kw for kw in keywords if kw in code_lower]
             if found_keywords:
                 suspicious_keywords.extend(found_keywords)
-                relevant_categories.add(SecurityCategory(category))
+                # Map category key to enum value using the mapping
+                category_enum = CATEGORY_KEY_TO_ENUM.get(category)
+                if category_enum:
+                    relevant_categories.add(category_enum)
 
         # Check for suspicious patterns (regex-based)
         patterns = self.SUSPICIOUS_PATTERNS.get(lang, [])
@@ -241,7 +259,10 @@ class QdrantService:
             suspicious_keywords.extend(go_keywords)
             go_categories = GoSecurityPatterns.get_categories_from_keywords(go_keywords)
             for category in go_categories:
-                relevant_categories.add(SecurityCategory(category))
+                # Map category key to enum value using the mapping
+                category_enum = CATEGORY_KEY_TO_ENUM.get(category)
+                if category_enum:
+                    relevant_categories.add(category_enum)
         else:
             for pattern in patterns:
                 matches = re.findall(pattern, code, re.IGNORECASE)

@@ -25,7 +25,7 @@ class WebScraper:
             headers = {
                 "User-Agent": settings.user_agent,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Language": "en-US,en;q=0.9",
             }
 
             response = requests.get(url, headers=headers, timeout=settings.request_timeout)
@@ -57,7 +57,7 @@ class WebScraper:
             headers = {
                 "User-Agent": settings.user_agent,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Language": "en-US,en;q=0.9",
             }
 
             response = requests.get(url, headers=headers, timeout=settings.request_timeout)
@@ -215,7 +215,8 @@ class WebScraper:
             # Common language codes: es, pt, ru, de, fr, it, ja, zh, ko, ar, tr, pl, cs, nl
             language_path_patterns = [
                 r"/es/", r"/pt/", r"/ru/", r"/de/", r"/fr/", r"/it/", r"/ja/",
-                r"/zh/", r"/ko/", r"/ar/", r"/tr/", r"/pl/", r"/cs/", r"/nl/",
+                r"/zh/", r"/zh-Hant/", r"/zh-hant/", r"/ko/", r"/ar/", r"/tr/", r"/pl/", r"/cs/", r"/nl/",
+                r"\.zh-Hant\.", r"\.zh-hant\.",  # Catch file extensions like .zh-Hant.html
                 r"wiki\.owasp\.org",  # Skip wiki pages
             ]
 

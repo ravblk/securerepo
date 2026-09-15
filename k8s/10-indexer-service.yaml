@@ -1,0 +1,76 @@
+---
+# Indexer Service ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: indexer-config
+  namespace: securerepo
+data:
+  QDRANT_URL: "http://qdrant:6333"
+  EMBEDDING_URL: "http://embedding:8080"
+  KAFKA_BROKER: "kafka:9092"
+  HTTP_TIMEOUT: "240"
+  EMBEDDING_TIMEOUT: "240"
+---
+# Indexer Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: indexer
+  namespace: securerepo
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8002
+    targetPort: 8002
+  selector:
+    app: indexer
+---
+# Indexer Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: indexer
+  namespace: securerepo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: indexer
+  template:
+    metadata:
+      labels:
+        app: indexer
+    spec:
+      containers:
+      - name: indexer
+        image: xravil/securerepo-indexer-service:v0.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8002
+        envFrom:
+        - configMapRef:
+            name: indexer-config
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3

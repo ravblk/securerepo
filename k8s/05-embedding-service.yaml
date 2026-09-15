@@ -1,0 +1,86 @@
+---
+# Embedding Service ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: embedding-config
+  namespace: securerepo
+data:
+  MODEL_NAME: "BAAI/bge-m3"
+---
+# Embedding Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding
+  namespace: securerepo
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: embedding
+---
+# Embedding Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding
+  namespace: securerepo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embedding
+  template:
+    metadata:
+      labels:
+        app: embedding
+    spec:
+      containers:
+      - name: embedding
+        image: xravil/securerepo-embedding-service:v0.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: embedding-config
+        env:
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: embedding-secret
+              key: HF_TOKEN
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 240
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 24

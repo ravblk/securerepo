@@ -1,0 +1,94 @@
+---
+# Frontend Service ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: securerepo
+data:
+  API_URL: "http://api:8000"
+  KEYCLOAK_URL: "http://keycloak:8080"
+  BROWSER_KEYCLOAK_URL: "http://localhost:8180"
+  KEYCLOAK_REALM: "securerepo"
+  KEYCLOAK_CLIENT_ID: "securerepo-api"
+
+---
+# Frontend Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: securerepo
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    targetPort: 3000
+  selector:
+    app: frontend
+---
+# Frontend Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: securerepo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: xravil/securerepo-frontend-service:v0.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: frontend-config
+        - secretRef:
+            name: frontend-secret
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+---
+# Frontend Service (LoadBalancer для внешнего доступа)
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-lb
+  namespace: securerepo
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3000        # Порт, на котором будет доступен Frontend на localhost
+    targetPort: 3000  # Порт внутри контейнера Frontend
+    name: http
+  selector:
+    app: frontend     # Убедитесь, что лейблы совпадают с лейблами в Deployment вашего Frontend

@@ -49,7 +49,6 @@
 
 ### 3.2 Confluence Ingestion Service
 
-- **Confluence Client**: подключение к Confluence API(для MVP https://about.gitlab.com/handbook/security/)
 - **HTML Parser**: извлечение текста из Confluence страниц
 - **Qdrant Indexer**: заливка в векторную БД
 

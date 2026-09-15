@@ -2,7 +2,6 @@ import logging
 import uuid
 from datetime import datetime
 from typing import Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from qdrant_client.models import PointStruct
 
@@ -50,7 +49,7 @@ class SyncController:
         logger.info(f"Sync {sync_id} started for {len(pages)} pages")
 
         try:
-            points = self._process_pages_parallel(pages, sync_id)
+            points = self._process_pages(pages, sync_id)
 
             if points:
                 self._qdrant_service.upsert_points(points)
@@ -75,41 +74,34 @@ class SyncController:
 
         return sync_id
 
-    def _process_pages_parallel(self, pages: list[dict], sync_id: str) -> list[PointStruct]:
-        """Process pages in parallel using ThreadPoolExecutor."""
+    def _process_pages(self, pages: list[dict], sync_id: str) -> list[PointStruct]:
+        """Process pages sequentially, like owasp-seeder."""
         points: list[PointStruct] = []
 
-        with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
-            future_to_page = {
-                executor.submit(self._process_page, page, sync_id): page
-                for page in pages
-            }
-
-            for future in as_completed(future_to_page):
-                page = future_to_page[future]
-                try:
-                    point = future.result()
-                    if point:
-                        points.append(point)
-                        self._sync_status[sync_id]["pages_processed"] += 1
-                        logger.info(f"✓ Processed page: {page.get('title', 'Unknown')}")
-                    else:
-                        self._sync_status[sync_id]["pages_failed"] += 1
-                        logger.warning(f"✗ Failed to process page: {page.get('url', 'Unknown')}")
-
-                except Exception as e:
-                    error_msg = f"Failed to process page {page.get('url')}: {e}"
-                    logger.error(error_msg)
+        for idx, page in enumerate(pages):
+            try:
+                point = self._process_page(page, idx)
+                if point:
+                    points.append(point)
+                    self._sync_status[sync_id]["pages_processed"] += 1
+                    logger.info(f"✓ Processed page {idx + 1}/{len(pages)}: {page.get('title', 'Unknown')}")
+                else:
                     self._sync_status[sync_id]["pages_failed"] += 1
+                    logger.warning(f"✗ Failed to process page {idx + 1}/{len(pages)}: {page.get('url', 'Unknown')}")
+
+            except Exception as e:
+                error_msg = f"Failed to process page {page.get('url')}: {e}"
+                logger.error(error_msg)
+                self._sync_status[sync_id]["pages_failed"] += 1
 
         return points
 
-    def _process_page(self, page: dict, sync_id: str) -> Optional[PointStruct]:
-        """Process a single page and create a Qdrant point."""
+    def _process_page(self, page: dict, idx: int) -> Optional[PointStruct]:
+        """Process a single page and create a Qdrant point, like owasp-seeder."""
         url = page.get("url")
         title = page.get("title", f"Page {page.get('id')}")
 
-        logger.debug(f"Processing page: {title} from {url}")
+        logger.info(f"Processing page {idx}: {title} from {url}")
 
         try:
             # Get text content
@@ -137,6 +129,7 @@ class SyncController:
                 }
             )
 
+            logger.info(f"Successfully processed: {title[:50]}")
             return point
 
         except Exception as e:

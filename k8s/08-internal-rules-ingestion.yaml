@@ -1,0 +1,83 @@
+---
+# Internal Rules Ingestion ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: internal-rules-ingestion-config
+  namespace: securerepo
+data:
+  QDRANT_URL: "http://qdrant:6333"
+  EMBEDDING_URL: "http://embedding:8080"
+  MAX_WORKERS: "2"
+  QDRANT_MAX_RETRIES: "10"
+  QDRANT_BACKOFF_BASE: "1.0"
+  QDRANT_BACKOFF_MAX: "30.0"
+  HTTP_MAX_RETRIES: "10"
+  HTTP_BACKOFF_BASE: "1.0"
+  HTTP_BACKOFF_MAX: "30.0"
+  HTTP_TIMEOUT: "240"
+  EMBEDDING_TIMEOUT: "240"
+  PAGES_JSON: '[{"id":1,"title":"Go Architectural Plan: Building a SAST Tool in Go","url":"https://github.com/lahiruramesh/go-sast/blob/master/docs/sast-architecture.md"},{"id":2,"title":"Go Extended Architecture","url":"https://github.com/lahiruramesh/go-sast/blob/master/docs/sast-extended-architecture.md"},{"id":3,"title":"Go Multi-Repository Architecture","url":"https://github.com/lahiruramesh/go-sast/blob/master/docs/sast-multirepo-gaps.md"},{"id":4,"title":"Python Security","url":"https://github.com/sinchanapatgar/CodeAlpha_SecureCodingReview/blob/main/secure_code_review.py"}]'
+---
+# Internal Rules Ingestion Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: internal-rules-ingestion
+  namespace: securerepo
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8001
+    targetPort: 8001
+  selector:
+    app: internal-rules-ingestion
+---
+# Internal Rules Ingestion Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: internal-rules-ingestion
+  namespace: securerepo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: internal-rules-ingestion
+  template:
+    metadata:
+      labels:
+        app: internal-rules-ingestion
+    spec:
+      containers:
+      - name: internal-rules-ingestion
+        image: xravil/securerepo-internal-rules-ingestion:v0.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8001
+        envFrom:
+        - configMapRef:
+            name: internal-rules-ingestion-config
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3

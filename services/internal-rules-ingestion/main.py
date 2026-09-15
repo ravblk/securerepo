@@ -73,7 +73,6 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Sync controller initialization failed: {e}. Will retry on demand.")
 
     logger.info(f"{settings.app_name} started successfully")
-    logger.info(f"Max workers: {settings.max_workers}")
     logger.info(f"Collection name: {settings.collection_name}")
 
     yield
