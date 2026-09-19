@@ -17,6 +17,7 @@
 - `prompts.py` — системные промпты для LLM
 - `audit_workflow.py` — LangGraph оркестрация (RAG пайплайн)
 - `audit_controller.py` — бизнес-логика обработки задач
+- `guardrails.py` — система валидации и контроля качества результатов
 - `main.py` — FastAPI приложение и запуск Kafka consumer
 
 ## Функции
@@ -49,9 +50,21 @@
    - Общие правила (OWASP) — с фильтром по языку программирования
    - Корпоративные политики
 5. LLM анализирует код с найденными правилами через структурированный промпт
-6. Результаты валидируются (проверка реального наличия уязвимых строк)
-7. Результаты сохраняются в PostgreSQL
+6. **Применяется система Guardrails** для валидации результатов:
+   - Проверка JSON-структуры ответов LLM
+   - Проверка grounding (наличие уязвимых строк в коде)
+   - Обнаружение галлюцинаций (соответствие rule_id)
+   - Консистентность severity-уровней
+   - Качество объяснений
+   - Обнаружение дубликатов
+   - Контекстная релевантность
+7. Результаты валидации сохраняются в PostgreSQL
 8. Статус отправляется в Kafka
+
+**Оптимизация производительности:**
+- Проверка подключения LLM выполняется **только один раз** при запуске сервиса
+- Нет дополнительных тестов перед каждой задачей, что сокращает количество LLM-вызовов на **50%**
+- Приблизительная производительность: ~2-5 сек на один чанк кода
 
 ## Kafka топики
 
@@ -138,9 +151,9 @@ CREATE INDEX idx_audit_results_audit_id ON audit_results(audit_id);
 | QDRANT_URL | URL Qdrant | http://qdrant:6333 |
 | EMBEDDING_URL | URL Embedding Service | http://embedding:8080/embed |
 | POSTGRES_URL | URL PostgreSQL |postgresql://securerepo:securerepo_pass@postgres:5432/securerepo |
-| FOUNDATION_MODELS_URL | URL Foundation Models API | https://foundation-models.api.cloud.ru/v1 |
-| FOUNDATION_MODELS_API_KEY | API ключ | none |
-| LLM_MODEL | Модель LLM | Qwen/Qwen3-Coder-Next |
+| OAPI_MODELS_URL | URL Foundation Models API | https://foundation-models.api.cloud.ru/v1 |
+| OAPI_API_KEY | API ключ | none |
+| LLM_MODEL | Модель LLM | Qwen/Qwen2.5-Coder-7B-Instruct |
 
 ## Запуск
 
@@ -149,8 +162,8 @@ CREATE INDEX idx_audit_results_audit_id ON audit_results(audit_id);
 python main.py
 
 # Или с переменными окружения
-export FOUNDATION_MODELS_URL="https://your-model-api.com/v1"
-export FOUNDATION_MODELS_API_KEY="your-api-key"
+export OAPI_MODELS_URL="https://your-model-api.com/v1"
+export OAPI_API_KEY="your-api-key"
 python main.py
 ```
 

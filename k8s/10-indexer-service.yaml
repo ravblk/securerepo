@@ -44,7 +44,7 @@ spec:
     spec:
       containers:
       - name: indexer
-        image: xravil/securerepo-indexer-service:v0.0.1
+        image: xravil/securerepo-indexer-service:v0.0.1-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8002

@@ -1,5 +1,6 @@
 import os
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from typing import List
 
 
@@ -24,12 +25,19 @@ class Settings:
     postgres_url: str = os.getenv("POSTGRES_URL", "postgresql://securerepo:securerepo_pass@postgres:5432/securerepo")
 
     # LLM Configuration
-    foundation_models_url: str = os.getenv("FOUNDATION_MODELS_URL", "https://foundation-models.api.cloud.ru/v1")
-    foundation_models_api_key: str = os.getenv("FOUNDATION_MODELS_API_KEY", "none")
-    llm_model: str = os.getenv("LLM_MODEL", "Qwen/Qwen3-Coder-Next")
+    OAPI_MODELS_URL: str = os.getenv("OAPI_MODELS_URL", "https://foundation-models.api.cloud.ru/v1")
+    OAPI_API_KEY: str = os.getenv("OAPI_API_KEY", "none")
+    llm_model: str = os.getenv("LLM_MODEL", "Qwen/Qwen2.5-Coder-7B-Instruct")
     llm_timeout: int = 120
     llm_temperature: float = 0.0
     llm_max_retries: int = 3
+
+    # Guardrails Configuration
+    guardrails_enabled: bool = bool(os.getenv("GUARDRAILS_ENABLED", "true").lower() == "true")
+    guardrails_strict_mode: bool = bool(os.getenv("GUARDRAILS_STRICT_MODE", "false").lower() == "true")
+    guardrails_max_code_length: int = int(os.getenv("GUARDRAILS_MAX_CODE_LENGTH", "10000"))
+    guardrails_min_explanation_length: int = int(os.getenv("GUARDRAILS_MIN_EXPLANATION_LENGTH", "20"))
+    guardrails_enabled_checks: List[str] = field(default_factory=lambda: json.loads(os.getenv("GUARDRAILS_ENABLED_CHECKS", '["json_validation", "grounding_check", "explanation_quality", "duplicate_detection"]')))
 
     # Service Configuration
     app_name: str = "Audit Worker"

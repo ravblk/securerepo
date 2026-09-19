@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-ingress
+  namespace: securerepo
+spec:
+  ingressClassName: nginx
+  rules:
+  # 1. Правило для Langfuse
+  - host: langfuse.37.44.197.88.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: langfuse
+            port:
+              number: 3090
+              
+  # 2. Правило для Keycloak
+  - host: keycloak.37.44.197.88.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: keycloak
+            port:
+              number: 8080
+              
+  # 3. Правило для Frontend (по старому IP без поддомена)
+  - host: 37.44.197.88.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 3000

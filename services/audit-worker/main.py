@@ -150,12 +150,7 @@ def process_message(message, consumer: Optional[object]) -> None:
             failed_audits.discard(audit_id)
             logger.info(f"Sent 'auditing' status for audit {audit_id}")
 
-        # Check LLM availability
-        logger.info("Checking LLM availability...")
-        if not audit_controller.check_llm_availability():
-            raise RuntimeError("LLM not available for analysis")
-
-        logger.info("LLM available, processing task...")
+        logger.info("Processing task...")
         violations, severity = audit_controller.process_task(task)
 
         # NOTE: consumer.commit() происходит автоматически внутри kafka_service.consume()

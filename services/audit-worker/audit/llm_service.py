@@ -20,10 +20,10 @@ class LLMService:
     def get_llm(self) -> ChatOpenAI:
         """Get or create LLM instance with Langfuse callback handler."""
         if self._llm is None:
-            if not settings.foundation_models_url or not settings.foundation_models_url.strip():
-                raise LLMConnectionError("FOUNDATION_MODELS_URL is empty or not set")
+            if not settings.OAPI_MODELS_URL or not settings.OAPI_MODELS_URL.strip():
+                raise LLMConnectionError("OAPI_MODELS_URL is empty or not set")
 
-            api_key = settings.foundation_models_api_key if settings.foundation_models_api_key else "none"
+            api_key = settings.OAPI_API_KEY if settings.OAPI_API_KEY else "none"
 
             try:
                 # Get Langfuse callback handler for automatic LLM tracing
@@ -38,7 +38,7 @@ class LLMService:
                 self._llm = ChatOpenAI(
                     model=settings.llm_model,
                     api_key=api_key,
-                    base_url=settings.foundation_models_url,
+                    base_url=settings.OAPI_MODELS_URL,
                     temperature=settings.llm_temperature,
                     timeout=settings.llm_timeout,
                     max_retries=settings.llm_max_retries,
@@ -59,7 +59,7 @@ class LLMService:
         except Exception as e:
             error_msg = str(e)
             if "api_key" in error_msg.lower() and "missing" in error_msg.lower():
-                return False, f"Missing API key for {settings.foundation_models_url}"
+                return False, f"Missing API key for {settings.OAPI_MODELS_URL}"
             return False, f"LLM connection failed: {error_msg}"
 
     def is_available(self) -> bool:

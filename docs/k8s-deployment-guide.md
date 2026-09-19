@@ -66,7 +66,7 @@ kubectl apply -f k8s/secrets-example/
 - `postgres-secret` — учетные данные PostgreSQL `POSTGRES_PASSWORD` и `POSTGRES_URL`
 - `frontend-secret` — Keycloak client secrets  `KEYCLOAK_CLIENT_SECRET`
 - `embedding-secret` — HuggingFace token для модели эмбеддингов `HF_TOKEN`
-- `fm-secret` - api key для дооступа к llm `FM_TOKEN`
+- `OAPI-Secret` - api key для дооступа к llm `OAPI_TOKEN` , `OAPI_MODELS_URL`
 
 ### 3. Развертывание инфраструктуры
 

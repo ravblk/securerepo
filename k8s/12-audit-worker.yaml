@@ -9,11 +9,13 @@ data:
   KAFKA_BROKER: "kafka:9092"
   QDRANT_URL: "http://qdrant:6333"
   EMBEDDING_URL: "http://embedding:8080/embed"
-  # FOUNDATION_MODELS_URL: "https://foundation-models.api.cloud.ru/v1"
-  FOUNDATION_MODELS_URL: "https://4826d203-afc2-473b-a666-83a5ae3b2834.modelrun.inference.cloud.ru/v1"
-  LLM_MODEL: "qwen2.5-coder-7b-instruct-abliterated:latest"
+  LLM_MODEL: "qwen2.5-coder-7b-instruct-abliterated:q4_k_m"
   HTTP_TIMEOUT: "240"
   EMBEDDING_TIMEOUT: "240"
+  # Guardrails Configuration - Only run essential checks
+  GUARDRAILS_ENABLED_CHECKS: '["json_validation", "grounding_check", "explanation_quality", "duplicate_detection"]'
+  GUARDRAILS_ENABLED: "true"
+  GUARDRAILS_STRICT_MODE: "false"
 ---
 # Audit Worker Deployment
 apiVersion: apps/v1
@@ -31,19 +33,26 @@ spec:
       labels:
         app: audit-worker
     spec:
+      nodeSelector:
+        node: node-audit
       containers:
       - name: audit-worker
-        image: xravil/securerepo-audit-worker:v0.0.4
+        image: xravil/securerepo-audit-worker:v0.0.2-amd64
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
             name: audit-worker-config
         env:
-        - name: FOUNDATION_MODELS_API_KEY
+        - name: OAPI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: fm-secret
-              key: FM_TOKEN
+              name: oapi-secret
+              key: OAPI_TOKEN
+        - name: OAPI_MODELS_URL
+          valueFrom:
+            secretKeyRef:
+              name: oapi-secret
+              key: OAPI_MODELS_URL
         - name: POSTGRES_URL
           valueFrom:
             secretKeyRef:
@@ -53,12 +62,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: langfuse-secrets
-              key: SECUREREPO_PUBLIC_KEY
+              key: SECUREREPO_SECRET_KEY  # Swapped: secret has pk- value
         - name: LANGFUSE_SECRET_KEY
           valueFrom:
             secretKeyRef:
               name: langfuse-secrets
-              key: SECUREREPO_SECRET_KEY
+              key: SECUREREPO_PUBLIC_KEY  # Swapped: secret has sk- value
         - name: LANGFUSE_HOST
           value: "http://langfuse:3090"
         resources:

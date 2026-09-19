@@ -119,7 +119,7 @@ CREATE INDEX idx_audit_results_audit_id ON audit_results(audit_id);
 
 | Модель | Назначение | Провайдер |
 |--------|------------|-----------|
-| LLM (Qwen3-Coder-Next) | Анализ кода | Foundation Models API |
+| LLM (Qwen2.5-Coder-7B-Instruct) | Анализ кода | Foundation Models API |
 
 ---
 
@@ -156,13 +156,14 @@ CREATE INDEX idx_audit_results_audit_id ON audit_results(audit_id);
 | 1 | Qdrant | Data | Векторная БД |
 | 2 | Apache Kafka | Data | Брокер сообщений |
 | 3 | PostgreSQL | Data | Реляционные данные + результаты аудитов |
-| 4 | Schema Registry | Data | Avro-схемы |
-| 5 | Confluence Ingestion | App | Синхронизация политик из Confluence |
-| 6 | OWASP Seeder | App | Seed OWASP/CWE базы знаний |
-| 7 | API Service | App | Эндпоинты |
-| 8 | Indexer Service | App | Парсинг + индексация кода |
-| 9 | Embedding Service | App | Эмбеддинги (BAAI/bge-m3) |
-| 10 | Audit Worker | App | Обработка аудита |
+| 4 | Keycloak | Auth | Аутентификация и авторизация пользователей |
+| 5 | Langfuse | Observability | Мониторинг и трассировка LLM запросов |
+| 6 | Internal Rules Ingestion | App | Загрузка корпоративных политик (JSON/Confluence API) |
+| 7 | OWASP Seeder | App | Seed OWASP/CWE базы знаний |
+| 8 | API Service | App | Эндпоинты |
+| 9 | Indexer Service | App | Парсинг + индексация кода |
+| 10 | Embedding Service | App | Эмбеддинги (BAAI/bge-m3) |
+| 11 | Audit Worker | App | Обработка аудита |
 
 ---
 
@@ -170,8 +171,8 @@ CREATE INDEX idx_audit_results_audit_id ON audit_results(audit_id);
 
 | Компонент | MVP | Post-MVP |
 |-----------|-----|----------|
-| LLM | Foundation Models API | vLLM + Llama 3-8B (Air-gapped) |
-| Политики | https://about.gitlab.com/handbook/security/ | Confluence API |
+| LLM | Foundation Models API | vLLM + Qwen2.5-7B (Air-gapped) |
+| Политики | JSON файл через Internal Rules Ingestion | Confluence API |
 | Embeddings | BAAI/bge-m3 (1024) | BAAI/bge-m3 |
 | Хранение результатов | PostgreSQL (audit_results) | PostgreSQL |
 | Neo4j (Call Graphs) | Нет | Да |

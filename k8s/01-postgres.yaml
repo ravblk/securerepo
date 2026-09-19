@@ -38,6 +38,8 @@ spec:
       labels:
         app: postgres
     spec:
+      nodeSelector:
+        node: node-db
       containers:
       - name: postgres
         image: postgres:16.2
@@ -52,6 +54,8 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data

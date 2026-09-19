@@ -8,18 +8,13 @@ metadata:
 data:
   KEYCLOAK_ADMIN: admin
   KC_DB: dev-file
-  KC_HEALTH_ENABLED: "true"       # ДОБАВЛЕНО: Включает /health эндпоинты
-  KC_PROXY_HEADERS: "xforwarded"              # ДОБАВЛЕНО: Правильная работа за Ingress (HTTP)
----
-# Keycloak Secret
-apiVersion: v1
-kind: Secret
-metadata:
-  name: keycloak-secret
-  namespace: securerepo
-type: Opaque
-data:
-  KEYCLOAK_ADMIN_PASSWORD: YWRtaW4=  # admin
+  KC_HEALTH_ENABLED: "true"
+  KC_HOSTNAME_STRICT: "false"
+  KC_HTTP_ENABLED: "true"
+  # KC_HOSTNAME: "keycloak.37.44.197.88.nip.io"
+  KC_PROXY_HEADERS: "xforwarded"
+  KC_SPI_LOGIN_PROTOCOL_OPENID_CONNECT_LEGACY_LOGOUT_REDIRECT_URI: "true"
+  KC_SPI_COOKIE_SECURE: "false"
 ---
 # Keycloak PersistentVolumeClaim
 apiVersion: v1
@@ -50,6 +45,10 @@ spec:
       labels:
         app: keycloak
     spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000        
       containers:
       - name: keycloak
         image: quay.io/keycloak/keycloak:24.0
@@ -109,16 +108,16 @@ spec:
     app: keycloak
     
 # Keycloak Service (LoadBalancer для внешнего доступа)
-apiVersion: v1
-kind: Service
-metadata:
-  name: keycloak-lb
-  namespace: securerepo
-spec:
-  type: LoadBalancer
-  ports:
-  - port: 8180
-    targetPort: 8080
-    name: http
-  selector:
-    app: keycloak
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: keycloak-lb
+#   namespace: securerepo
+# spec:
+#   type: LoadBalancer
+#   ports:
+#   - port: 8180
+#     targetPort: 8080
+#     name: http
+#   selector:
+#     app: keycloak

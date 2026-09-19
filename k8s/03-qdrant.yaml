@@ -37,6 +37,8 @@ spec:
       labels:
         app: qdrant
     spec:
+      nodeSelector:
+        node: node-db
       containers:
       - name: qdrant
         image: qdrant/qdrant:v1.7.4

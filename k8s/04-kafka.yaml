@@ -20,6 +20,7 @@ data:
   KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
   KAFKA_LOG_RETENTION_HOURS: "168"
   CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+  KAFKA_LOG_DIRS: /var/lib/kafka/data/kafka-logs  
 ---
 # Kafka PersistentVolumeClaim
 apiVersion: v1

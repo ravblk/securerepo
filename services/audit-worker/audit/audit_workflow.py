@@ -13,6 +13,8 @@ from .embedding_service import EmbeddingService
 from .exceptions import WorkflowError
 from .models import AuditState
 from .langfuse_service import langfuse_service
+from .guardrails import guardrail_engine
+from .guardrails import guardrail_engine
 
 logger = logging.getLogger(__name__)
 
@@ -488,24 +490,75 @@ class AuditWorkflow:
         return repaired
 
     def _ground_and_validate(self, state: dict) -> dict:
-        """Validate that vulnerable lines exist in the code."""
+        """Validate that vulnerable lines exist in code and apply guardrails."""
         code = state["code"]
         violations = state["violations"]
+        lang = state.get("lang", "python")
+        audit_id = state.get("audit_id")
+        general_rules = state.get("general_rules", [])
+        internal_rules = state.get("internal_rules", [])
 
+        # Basic grounding check (existing functionality)
         validated = [
             v for v in violations
             if v.get("vulnerable_line", "") and v.get("vulnerable_line") in code
         ]
 
-        removed_count = len(violations) - len(validated)
-        if removed_count > 0:
-            logger.info(f"Grounded violations: removed {removed_count} invalid references")
+        removed_count_baseline = len(violations) - len(validated)
 
-        return {"violations": validated}
+        if removed_count_baseline > 0:
+            logger.info(f"Baseline grounding: removed {removed_count_baseline} invalid references")
+
+        # Apply comprehensive guardrails
+        all_rules = general_rules + internal_rules
+        filtered_violations, guardrail_results = guardrail_engine.validate_output(
+            violations=validated,
+            code=code,
+            available_rules=all_rules,
+            strict_mode=False  # Set to True for strict operation mode
+        )
+
+        total_removed = len(violations) - len(filtered_violations)
+        guardrail_removed = len(validated) - len(filtered_violations)
+
+        # Log guardrail validation results
+        logger.info(
+            f"Guardrail validation: {len(filtered_violations)}/{len(violations)} violations passed "
+            f"({total_removed} removed)"
+        )
+
+        # Get and log guardrail statistics
+        guardrail_statistics = guardrail_engine.get_guardrail_statistics(guardrail_results)
+        logger.info(
+            f"Guardrail statistics: {guardrail_statistics['passed_guardrails']}/{guardrail_statistics['total_guardrails']} passed, "
+            f"{guardrail_statistics['total_violations_filtered']} total filtered, "
+            f"pass_rate: {guardrail_statistics['pass_rate']:.1f}%"
+        )
+
+        # Log detailed guardrail results
+        for check_name, result in guardrail_results.items():
+            status = "✓" if result.passed else "✗"
+            if result.filtered_indices:
+                logger.info(
+                    f"{status} {check_name}: {result.message} "
+                    f"(removed {len(result.filtered_indices)} violations)"
+                )
+            else:
+                logger.info(f"{status} {check_name}: {result.message}")
+
+        # Log guardrail results to Langfuse
+        if self._current_trace and audit_id:
+            langfuse_service.create_event(
+                trace_id=self._current_trace.id,
+                name="guardrail_validation",
+                metadata=guardrail_statistics
+            )
+
+        return {"violations": filtered_violations}
 
     def process(self, audit_task, initial_state: dict) -> tuple[list, Optional[str]]:
         """Process audit task through the workflow with Langfuse tracing."""
-        audit_id = initial_state.get("audit_id", "unknown")
+        audit_id = initial_state.get("audit_id", audit_task.audit_id)
 
         try:
             # Create Langfuse trace for this audit operation

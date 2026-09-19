@@ -8,7 +8,7 @@ metadata:
 data:
   API_URL: "http://api:8000"
   KEYCLOAK_URL: "http://keycloak:8080"
-  BROWSER_KEYCLOAK_URL: "http://localhost:8180"
+  BROWSER_KEYCLOAK_URL: "http://keycloak.37.44.197.88.nip.io"
   KEYCLOAK_REALM: "securerepo"
   KEYCLOAK_CLIENT_ID: "securerepo-api"
 
@@ -43,9 +43,11 @@ spec:
       labels:
         app: frontend
     spec:
+      nodeSelector:
+        node: node-app
       containers:
       - name: frontend
-        image: xravil/securerepo-frontend-service:v0.0.1
+        image: xravil/securerepo-frontend-service:v0.0.1-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
@@ -79,16 +81,16 @@ spec:
           failureThreshold: 3
 ---
 # Frontend Service (LoadBalancer для внешнего доступа)
-apiVersion: v1
-kind: Service
-metadata:
-  name: frontend-lb
-  namespace: securerepo
-spec:
-  type: LoadBalancer
-  ports:
-  - port: 3000        # Порт, на котором будет доступен Frontend на localhost
-    targetPort: 3000  # Порт внутри контейнера Frontend
-    name: http
-  selector:
-    app: frontend     # Убедитесь, что лейблы совпадают с лейблами в Deployment вашего Frontend
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: frontend-lb
+#   namespace: securerepo
+# spec:
+#   type: LoadBalancer
+#   ports:
+#   - port: 3000        # Порт, на котором будет доступен Frontend на localhost
+#     targetPort: 3000  # Порт внутри контейнера Frontend
+#     name: http
+#   selector:
+#     app: frontend     # Убедитесь, что лейблы совпадают с лейблами в Deployment вашего Frontend

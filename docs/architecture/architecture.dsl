@@ -94,7 +94,7 @@ workspace {
                 pagedAttention = component "PagedAttention" "Эффективная работа с KV-кешем"
             }
 
-            llama8b = container "Llama-3-8B-Instruct" "Анализ кода (4-bit AWQ)" {
+            qwen7b = container "qwen-coder-7b-instruct" "Анализ кода (4-bit AWQ)" {
                 analyze = component "Analyze" "Однопроходный аудит кода"
                 structuredOutput = component "Structured Output" "JSON Schema вывод"
             }
@@ -120,12 +120,15 @@ workspace {
         securerepo.internalRulesIngestion.qdrantIndexer -> securerepo.qdrant.internalPolicies "Вектора политик"
 
         // Keycloak → API (авторизация)
-        keycloak -> securerepo.apiService "JWT токены"
+        keycloak -> securerepo.frontendService.oauthCallback "JWT токены"
         keycloak -> securerepo.frontendService.oauthCallback "OAuth code"
 
         // User → Frontend
         user -> securerepo.frontendService.login "Вход"
         user -> securerepo.frontendService.dashboard "Просмотр аудитов"
+        User -> securerepo.frontendService.dashboard "Запуск аудита"
+        user -> securerepo.frontendService.dashboard "Проверка статуса"
+        user -> securerepo.frontendService.dashboard "Скачивание отчёта"
 
         // Frontend → API
         securerepo.frontendService.dashboard -> securerepo.apiService.listAudits "Список аудитов"
@@ -133,10 +136,11 @@ workspace {
         securerepo.frontendService.dashboard -> securerepo.apiService.getStatus "Статус"
         securerepo.frontendService.dashboard -> securerepo.apiService.getReport "Отчёт"
 
+
         // User → API (напрямую)
-        user -> securerepo.apiService.startAudit "Запуск аудита"
-        user -> securerepo.apiService.getStatus "Проверка статуса"
-        user -> securerepo.apiService.getReport "Скачивание отчёта"
+        // user -> securerepo.apiService.startAudit "Запуск аудита"
+        // user -> securerepo.apiService.getStatus "Проверка статуса"
+        // user -> securerepo.apiService.getReport "Скачивание отчёта"
 
         // API → Kafka → Indexer
         securerepo.apiService.startAudit -> securerepo.postgres.audits "Создание записи аудита (status: pending)"
@@ -165,12 +169,12 @@ workspace {
         securerepo.auditWorker.generalRetriever -> securerepo.qdrant.generalPractices "Поиск OWASP"
         securerepo.auditWorker.internalRetriever -> securerepo.qdrant.internalPolicies "Поиск политик"
         securerepo.auditWorker.analyzer -> securerepo.guardrails.toxicityCheck "Проверка входа"
-        securerepo.guardrails.toxicityCheck -> securerepo.llama8b.analyze "Анализ кода"
+        securerepo.guardrails.toxicityCheck -> securerepo.qwen7b.analyze "Анализ кода"
         securerepo.auditWorker.resultWriter -> securerepo.postgres.auditResults "Сохранение результатов в PostgreSQL"
         securerepo.auditWorker.resultWriter -> securerepo.kafka.auditStatus "status: completed"
 
         // vLLM → LLM
-        securerepo.vllm.continuousBatching -> securerepo.llama8b.analyze "Инференс"
+        securerepo.vllm.continuousBatching -> securerepo.qwen7b.analyze "Инференс"
 
         // Report → User (через API)
         securerepo.postgres.auditResults -> securerepo.apiService.getReport "Финальный отчёт"

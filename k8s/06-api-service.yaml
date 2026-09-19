@@ -40,9 +40,11 @@ spec:
       labels:
         app: api
     spec:
+      nodeSelector:
+        node: node-app
       containers:
       - name: api
-        image: xravil/securerepo-api-service:v0.0.1
+        image: xravil/securerepo-api-service:v0.0.1-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
@@ -85,16 +87,16 @@ spec:
           failureThreshold: 3
 ---
 # API Service (LoadBalancer для внешнего доступа)
-apiVersion: v1
-kind: Service
-metadata:
-  name: api-lb
-  namespace: securerepo
-spec:
-  type: LoadBalancer
-  ports:
-  - port: 8000        # Порт, на котором будет доступен API на localhost
-    targetPort: 8000  # Порт внутри контейнера API
-    name: http
-  selector:
-    app: api          # Убедитесь, что лейблы совпадают с лейблами в Deployment вашего API
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: api-lb
+#   namespace: securerepo
+# spec:
+#   type: LoadBalancer
+#   ports:
+#   - port: 8000        # Порт, на котором будет доступен API на localhost
+#     targetPort: 8000  # Порт внутри контейнера API
+#     name: http
+#   selector:
+#     app: api          # Убедитесь, что лейблы совпадают с лейблами в Deployment вашего API

@@ -13,12 +13,16 @@ spec:
       labels:
         app: langfuse-server
     spec:
+      nodeSelector:
+        node: node-audit
       containers:
       - name: langfuse-server
         image: langfuse/langfuse:2.95.0
         ports:
         - containerPort: 3000
         env:
+        - name: SIGN_UP_DISABLED
+          value: "true"
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
@@ -57,9 +61,9 @@ spec:
               name: langfuse-secrets
               key: LANGFUSE_INIT_USER_NAME
         - name: HOST_URL
-          value: "http://langfuse:3090"
+          value: "http://langfuse.37.44.197.88.nip.io"
         - name: NEXTAUTH_URL
-          value: "http://localhost:3090"
+          value: "http://langfuse.37.44.197.88.nip.io"
         resources:
           requests:
             memory: "512Mi"
@@ -98,17 +102,3 @@ spec:
     clientIP:
       timeoutSeconds: 10800
 
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: langfuse-lb
-  namespace: securerepo
-spec:
-  type: LoadBalancer
-  selector:
-    app: langfuse-server
-  ports:
-  - name: http
-    port: 3090
-    targetPort: 3000
