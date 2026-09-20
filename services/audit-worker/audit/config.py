@@ -28,7 +28,7 @@ class Settings:
     OAPI_MODELS_URL: str = os.getenv("OAPI_MODELS_URL", "https://foundation-models.api.cloud.ru/v1")
     OAPI_API_KEY: str = os.getenv("OAPI_API_KEY", "none")
     llm_model: str = os.getenv("LLM_MODEL", "Qwen/Qwen2.5-Coder-7B-Instruct")
-    llm_timeout: int = 120
+    llm_timeout: int = 300
     llm_temperature: float = 0.0
     llm_max_retries: int = 3
 

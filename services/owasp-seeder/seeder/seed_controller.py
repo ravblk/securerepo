@@ -46,15 +46,6 @@ class SeedController:
         """Get default OWASP Top 10 pages."""
         return [
             "https://owasp.org/www-project-top-ten/",
-            "https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control",
-            "https://owasp.org/Top10/2025/A02_2025-Security_Misconfiguration",
-            "https://owasp.org/Top10/2025/A03_2025-Software_Supply_Chain_Failures",
-            "https://owasp.org/Top10/2025/A04_2025-Cryptographic_Failures",
-            "https://owasp.org/Top10/2025/A05_2025-Injection",
-            "https://owasp.org/Top10/2025/A06_2025-Insecure_Design",
-            "https://owasp.org/Top10/2025/A07_2025-Authentication_Failures",
-            "https://owasp.org/Top10/2025/A08_2025-Software_or_Data_Integrity_Failures",
-            "https://owasp.org/Top10/2025/A09_2025-Security_Logging_and_Alerting_Failures",
         ]
 
     def start_seed(self, request: SeedRequest) -> str:
