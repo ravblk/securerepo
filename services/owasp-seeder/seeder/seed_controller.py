@@ -14,7 +14,7 @@ from .qdrant_service import QdrantService
 from .exceptions import ScrapingError
 
 logger = logging.getLogger(__name__)
-
+defaultPage = "https://owasp.org/www-project-top-ten/"
 
 class SeedController:
     """Controller for OWASP seeding operations."""
@@ -45,7 +45,7 @@ class SeedController:
     def _get_default_pages(self) -> list:
         """Get default OWASP Top 10 pages."""
         return [
-            "https://owasp.org/www-project-top-ten/",
+            defaultPage,
         ]
 
     def start_seed(self, request: SeedRequest) -> str:
