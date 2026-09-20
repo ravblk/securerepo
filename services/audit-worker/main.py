@@ -122,7 +122,7 @@ def initialize_services() -> None:
     logger.info("All services initialized to operate mode (some dependencies may reconnect on demand)")
 
 
-def process_message(message, consumer: Optional[object]) -> None:
+def process_message(message, consumer) -> None:
     """Process a single Kafka message."""
     task: Optional[AuditTask] = None
     audit_id: Optional[str] = None
@@ -153,9 +153,6 @@ def process_message(message, consumer: Optional[object]) -> None:
         logger.info("Processing task...")
         violations, severity = audit_controller.process_task(task)
 
-        # NOTE: consumer.commit() происходит автоматически внутри kafka_service.consume()
-        # В подходе indexer-service это обрабатывается автоматически
-
         logger.info(
             f"Processed {task.chunk_id}, violations: {len(violations)}, "
             f"severity: {severity}, is_last_chunk: {is_last_chunk}"
@@ -183,21 +180,47 @@ def process_message(message, consumer: Optional[object]) -> None:
 
 def consume_tasks() -> None:
     """Main consumer loop for processing audit tasks."""
-    # Используем метод consume() из kafka_service (как в indexer-service)
-    # Метод consume() автоматически обрабатывает retry логику и инициализацию consumer
-    def on_message(message) -> None:
-        # В indexer-style consume, consumer обрабатывается внутри kafka_service
-        # Нам не нужен явный consumer.commit() - это происходит автоматически
-        process_message(message, None)
+    cycle_count = 0
+    max_cycles = 1  # Process messages only once
+
+    logger.info(f"Starting to consume from topic: {settings.audit_tasks_topic}")
 
     try:
-        logger.info(f"Starting to consume from topic: {settings.audit_tasks_topic}")
-    except Exception as e:
-        logger.error(f"Error preparing kafka consumption: {e}")
-        time.sleep(5)
+        while cycle_count < max_cycles:
+            consumer = None
+            while consumer is None:
+                try:
+                    consumer = kafka_service.create_consumer(settings.audit_tasks_topic)
+                    logger.info("Consumer created for cycle %d/%d", cycle_count + 1, max_cycles)
+                except Exception as e:
+                    logger.error("Failed to create consumer: %s, retrying in 5 seconds...", e)
+                    time.sleep(5)
 
-    try:
-        kafka_service.consume(settings.audit_tasks_topic, on_message)
+            logger.info("Waiting for messages...")
+            messages_processed = 0
+            for message in consumer:
+                try:
+                    process_message(message, consumer)
+                    messages_processed += 1
+
+                    # Commit offset after successful processing
+                    try:
+                        consumer.commit()
+                    except Exception as e:
+                        logger.error("Failed to commit offset: %s", e)
+
+                except Exception as e:
+                    logger.error("Error in consume loop: %s", e)
+                    # Don't commit on error - message will be retried
+                    if e.__class__.__name__ == 'KeyboardInterrupt':
+                        raise
+
+            logger.info("Cycle %d completed. Processed %d messages", cycle_count + 1, messages_processed)
+            consumer.close()
+            cycle_count += 1
+
+        logger.info("All processing cycles completed")
+
     except KeyboardInterrupt:
         logger.info("Consuming stopped by user")
     except Exception as e:

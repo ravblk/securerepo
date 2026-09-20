@@ -85,9 +85,21 @@ class KafkaService:
         except Exception as e:
             logger.exception("Failed to send status for audit %s: %s", audit_id, e)
 
+    def create_consumer(self, topic: str):
+        """Create Kafka consumer instance."""
+        return KafkaConsumer(
+            topic,
+            bootstrap_servers=settings.kafka_broker,
+            group_id=settings.audit_group,
+            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+            auto_offset_reset="latest",
+            enable_auto_commit=False,  # We'll commit manually after processing
+        )
+
     def consume(self, topic: str, on_message: Callable) -> None:
-        """Consume messages from Kafka topic with retry logic (same as indexer)."""
-        while True:
+        """Consume messages from Kafka topic with proper offset handling."""
+        consumer = None
+        while consumer is None:
             try:
                 consumer = KafkaConsumer(
                     topic,
@@ -95,17 +107,22 @@ class KafkaService:
                     group_id=settings.audit_group,
                     value_deserializer=lambda m: json.loads(m.decode("utf-8")),
                     auto_offset_reset="latest",
-                    enable_auto_commit=True,
+                    enable_auto_commit=False,  # We'll commit manually after processing
                 )
                 logger.info("Listening to topic '%s'", topic)
-                break
-            except Exception:
-                logger.warning("Kafka not available, retrying in 5 seconds...")
+            except Exception as e:
+                logger.warning("Kafka not available, retrying in 5 seconds... Error: %s", e)
                 time.sleep(5)
 
         logger.info("Waiting for messages...")
         for message in consumer:
-            on_message(message)
+            try:
+                on_message(message)
+                # Commit offset after successful processing
+                consumer.commit()
+            except Exception as e:
+                logger.error("Error processing message: %s. Will retry this message.", e)
+                # Don't commit on error, so message will be processed again
 
     def close(self) -> None:
         """Close Kafka producer connection."""

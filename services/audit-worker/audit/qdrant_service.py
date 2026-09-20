@@ -276,10 +276,10 @@ class QdrantService:
             code_patterns = self._extract_code_patterns(code, lang)
 
         return CodeAnalysisResult(
-            suspicious_keywords=list(set(suspicious_keywords)),
-            suspicious_functions=list(set(suspicious_functions)),
+            suspicious_keywords=[str(kw) for kw in list(set(suspicious_keywords)) if kw],
+            suspicious_functions=[str(fn) for fn in list(set(suspicious_functions)) if fn],
             library_calls=library_calls,
-            code_patterns=code_patterns,
+            code_patterns=[str(pat) for pat in code_patterns if pat],
             security_categories={SecurityCategory(cat.value) if isinstance(cat, str) else cat for cat in relevant_categories}
         )
 
@@ -289,8 +289,12 @@ class QdrantService:
 
         if lang == "python":
             # Python imports and library calls
-            import_pattern = r"(?:from\s+(\w+)|import\s+(\w+))"
-            library_calls.extend(re.findall(import_pattern, code, re.IGNORECASE))
+            # Fixed pattern to avoid tuple returns - use two separate patterns
+            import_pattern = r"from\s+(\w+)|import\s+(\w+)"
+            matches = re.findall(import_pattern, code, re.IGNORECASE)
+            # Flatten tuples from re.findall with multiple groups
+            for match in matches:
+                library_calls.extend([m for m in match if m])
 
             # Function calls
             call_pattern = r"(\w+)\.\w+\s*\("
@@ -304,6 +308,8 @@ class QdrantService:
             call_pattern = r"(\w+)\.\w+\s*\("
             library_calls.extend(re.findall(call_pattern, code))
 
+        # Filter out non-string items and ensure all are strings
+        library_calls = [str(lib) for lib in library_calls if lib]
         return list(set(library_calls))
 
     def _extract_code_patterns(self, code: str, lang: str) -> List[str]:
@@ -756,7 +762,7 @@ class QdrantService:
 
             # Boost for specific library/function mentions
             for lib in code_analysis.library_calls:
-                if lib.lower() in rule_text:
+                if isinstance(lib, str) and lib.lower() in rule_text:
                     keyword_score += 0.03
 
             # Boost for code patterns

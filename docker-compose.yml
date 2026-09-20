@@ -9,8 +9,8 @@ services:
       - "8180:8080"
     command: start-dev
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_DB: dev-file
     volumes:
       - ./keycloak_data:/opt/keycloak/data/h2
@@ -63,15 +63,15 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: securerepo
-      POSTGRES_PASSWORD: securerepo_pass
-      POSTGRES_DB: securerepo
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
     networks:
       - securerepo
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U securerepo || exit 1"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -108,7 +108,7 @@ services:
     environment:
       - KAFKA_BROKER=kafka:9092
       - QDRANT_URL=http://qdrant:6333
-      - POSTGRES_URL=postgresql://securerepo:securerepo_pass@postgres:5432/securerepo
+      - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - KEYCLOAK_URL=http://keycloak:8180
     networks:
       - securerepo
@@ -132,7 +132,7 @@ services:
       - BROWSER_KEYCLOAK_URL=http://localhost:8180
       - KEYCLOAK_REALM=securerepo
       - KEYCLOAK_CLIENT_ID=securerepo-api
-      - KEYCLOAK_CLIENT_SECRET=securerepo-secret
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
     networks:
       - securerepo
     depends_on:
@@ -216,7 +216,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - QDRANT_URL=http://qdrant:6333
       - EMBEDDING_URL=http://embedding:8080/embed
-      - POSTGRES_URL=postgresql://securerepo:securerepo_pass@postgres:5432/securerepo
+      - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - FOUNDATION_MODELS_URL=https://foundation-models.api.cloud.ru/v1
       - LLM_MODEL=Qwen/Qwen3-Coder-Next
       - HTTP_TIMEOUT=240

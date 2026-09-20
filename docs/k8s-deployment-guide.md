@@ -221,3 +221,20 @@ kubectl delete -f k8s/
 ```bash
 kubectl delete namespace securerepo
 ```
+
+## Как запустить модель на vLLM 
+
+Важный нюанс: **vLLM официально поддерживает GGUF** начиная с версий 0.4.x+ и 0.5.x+, но делает это через движок `llamafile`. Однако vLLM работает **гораздо быстрее и стабильнее** с форматами `AWQ` или `GPTQ`, а также с нативным `fp16/bf16`. 
+
+Если вы принципиально хотите использовать именно GGUF, команда будет такой:
+
+```bash
+python -m vllm.entrypoints.openai.api_server \
+  --model Qwen/Qwen2.5-Coder-7B-Instruct-GGUF \
+  --tokenizer Qwen/Qwen2.5-Coder-7B-Instruct \
+  --quantization gguf \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.8 \
+  --enable-prefix-caching \
+  --host 0.0.0.0 --port 8000
+```
