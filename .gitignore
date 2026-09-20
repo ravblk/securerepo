@@ -7,4 +7,3 @@ docs/internal
 scripts
 .env
 *.data
-services/owasp-seeder/tests
