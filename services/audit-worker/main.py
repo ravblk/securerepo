@@ -203,11 +203,13 @@ def consume_tasks() -> None:
                     process_message(message, consumer)
                     messages_processed += 1
 
-                    # Commit offset after successful processing
+                    # Commit offset after successful processing with improved error handling
                     try:
                         consumer.commit()
                     except Exception as e:
-                        logger.error("Failed to commit offset: %s", e)
+                        logger.warning("Failed to commit offset: %s. Message may be reprocessed.", e)
+                        # Continue processing rather than crashing - the message will be reprocessed
+                        # This is acceptable for idempotent operations
 
                 except Exception as e:
                     logger.error("Error in consume loop: %s", e)

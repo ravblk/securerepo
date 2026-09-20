@@ -86,18 +86,21 @@ class KafkaService:
             logger.exception("Failed to send status for audit %s: %s", audit_id, e)
 
     def create_consumer(self, topic: str):
-        """Create Kafka consumer instance."""
+        """Create Kafka consumer instance with extended session timeout for long LLM processing."""
         return KafkaConsumer(
             topic,
             bootstrap_servers=settings.kafka_broker,
             group_id=settings.audit_group,
             value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-            auto_offset_reset="latest",
+            auto_offset_reset="earliest",  # Process all pending messages, not just new ones
             enable_auto_commit=False,  # We'll commit manually after processing
+            session_timeout_ms=settings.kafka_session_timeout_ms,  # Extended timeout for LLM processing
+            heartbeat_interval_ms=settings.kafka_heartbeat_interval_ms,  # Frequent heartbeats
+            max_poll_records=1,  # Process one record at a time to avoid timeout
         )
 
     def consume(self, topic: str, on_message: Callable) -> None:
-        """Consume messages from Kafka topic with proper offset handling."""
+        """Consume messages from Kafka topic with proper offset handling and extended session timeout."""
         consumer = None
         while consumer is None:
             try:
@@ -106,8 +109,11 @@ class KafkaService:
                     bootstrap_servers=settings.kafka_broker,
                     group_id=settings.audit_group,
                     value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-                    auto_offset_reset="latest",
+                    auto_offset_reset="earliest",  # Process all pending messages, not just new ones
                     enable_auto_commit=False,  # We'll commit manually after processing
+                    session_timeout_ms=settings.kafka_session_timeout_ms,  # Extended timeout for LLM processing
+                    heartbeat_interval_ms=settings.kafka_heartbeat_interval_ms,  # Frequent heartbeats
+                    max_poll_records=1,  # Process one record at a time to avoid timeout
                 )
                 logger.info("Listening to topic '%s'", topic)
             except Exception as e:
@@ -121,7 +127,11 @@ class KafkaService:
                 # Commit offset after successful processing
                 consumer.commit()
             except Exception as e:
-                logger.error("Error processing message: %s. Will retry this message.", e)
+                error_type = type(e).__name__
+                if "CommitFailedError" in error_type:
+                    logger.warning("Consumer was kicked from group during long processing: %s. Message will be reprocessed.", e)
+                else:
+                    logger.error("Error processing message: %s. Will retry this message.", e)
                 # Don't commit on error, so message will be processed again
 
     def close(self) -> None:

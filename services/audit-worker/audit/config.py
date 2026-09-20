@@ -12,6 +12,8 @@ class Settings:
     audit_status_topic: str = "audit.status"
     audit_group: str = "audit-worker"
     kafka_timeout_seconds: int = 30
+    kafka_session_timeout_ms: int = 300000  # 5 minutes to accommodate LLM processing
+    kafka_heartbeat_interval_ms: int = 10000  # Send heartbeat every 10 seconds
 
     # Qdrant Configuration
     qdrant_url: str = os.getenv("QDRANT_URL", "http://qdrant:6333")
