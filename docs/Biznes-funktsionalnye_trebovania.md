@@ -66,7 +66,7 @@
 | :--- | :--- | :--- | :--- |
 | FR-3.1 | General Retriever | Семантический поиск по коллекции `general_best_practices` (OWASP/CWE) в Qdrant. | высокий |
 | FR-3.2 | Internal Retriever | Семантический поиск по коллекции `internal_policies` (корпоративные правила). | высокий |
-| FR-3.3 | LLM-анализатор | Qwen-Coder-Next сравнивает код с найденными правилами. Строгий JSON-вывод. | высокий |
+| FR-3.3 | LLM-анализатор | Qwen2.5-Coder-7B-Instruct-GGUF сравнивает код с найденными правилами. Строгий JSON-вывод. | высокий |
 | FR-3.4 | Форматирование результатов | Каждый найденный инцидент содержит: файл, строки, описание уязвимости, ссылку на пункт регламента. | высокий |
 
 ### Блок 3.4: Авторизация и безопасность
@@ -129,7 +129,7 @@
 | API Gateway | FastAPI |
 | Векторная БД | Qdrant |
 | Message Broker | Apache Kafka |
-| LLM Engine | vLLM + Qwen-Coder-Next |
+| LLM Engine | vLLM + Qwen2.5-Coder-7B-Instruct-GGUF |
 | Embedding | BGE-m3 (HuggingFace TEI) |
 | Orchestration | LangGraph |
 | Auth | Keycloak (OAuth2/OIDC) |
@@ -151,8 +151,13 @@
 - [x] JSON-отчет с результатами
 
 **За рамками MVP:**
+- Метрики в Grafana
 - Semantic Cache для RAG
 - KEDA autoscaling по метрике очереди запросов
 - Все HTTP-запросы между компонентами шифруются TLS 1.2+
 - Добавить хранилище секретов Vault
-- Добавть правила mitre
+- Добавть правила MITRE
+- Воркер очистки старых данных из Postgres и Qdrant
+- Использование Neo4j для Call Graphs
+- Админка
+- Аудит логирование
