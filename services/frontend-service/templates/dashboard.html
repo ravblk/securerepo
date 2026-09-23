@@ -366,6 +366,31 @@
             50% { transform: scale(1.05); }
         }
 
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: #10b981;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+
+        .live-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+
         /* Детали отчёта в одну линию */
         .report-details {
             display: flex;
@@ -732,6 +757,10 @@
     <div class="header">
         <h1>🔒 SecureRepo</h1>
         <div>
+            <div class="live-indicator">
+                <span class="live-dot"></span>
+                <span>Live</span>
+            </div>
             <span class="user" id="userInfo">Загрузка...</span>
             <a href="/login" class="logout">Выйти</a>
         </div>
@@ -845,11 +874,17 @@
         }
 
         let currentUser = null;
+        let isLoadingAudits = false;
+        let lastAuditData = null;
 
         async function loadAudits() {
+            if (isLoadingAudits) return; // Skip if already loading
+            isLoadingAudits = true;
+
             const token = getToken();
             if (!token) {
                 window.location.href = '/login';
+                isLoadingAudits = false;
                 return;
             }
 
@@ -859,9 +894,18 @@
                 });
                 const data = await response.json();
 
+                // Check if data actually changed
+                const dataStr = JSON.stringify(data);
+                if (lastAuditData === dataStr) {
+                    isLoadingAudits = false;
+                    return; // Skip update if no changes
+                }
+                lastAuditData = dataStr;
+
                 const list = document.getElementById('auditList');
                 if (!data.items || data.items.length === 0) {
                     list.innerHTML = '<p>Нет аудитов. Создайте первый аудит 🎯</p>';
+                    isLoadingAudits = false;
                     return;
                 }
 
@@ -879,8 +923,13 @@
             } catch (e) {
                 console.error(e);
                 document.getElementById('auditList').innerHTML = '<p>❌ Ошибка загрузки аудитов</p>';
+            } finally {
+                isLoadingAudits = false;
             }
         }
+
+        // Auto-refresh audits every second
+        setInterval(loadAudits, 1000);
 
         function openNewAuditModal() {
             document.getElementById('newAuditModal').classList.add('active');

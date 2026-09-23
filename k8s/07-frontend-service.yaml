@@ -47,7 +47,7 @@ spec:
         node: node-app
       containers:
       - name: frontend
-        image: xravil/securerepo-frontend-service:v0.0.1-amd64
+        image: xravil/securerepo-frontend-service:v0.0.2-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
