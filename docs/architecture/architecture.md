@@ -6,7 +6,7 @@
 
 - **Air-gapped**: система готова к работе без внешних API
 - **Batch Processing**: обработка репозиториев 100k+ строк
-- **Hybrid Rules**: корпоративные политики (Confluence) + отраслевые стандарты (OWASP, CWE)
+- **Zero-Shot Security**: LLM анализ с CWE-ID идентификацией + корпоративные политики (Confluence)
 
 ---
 
@@ -16,8 +16,7 @@
 
 | Коллекция | Назначение | Источник | Модель эмбеддингов |
 |-----------|------------|----------|-------------------|
-| `internal_policies` | Корпоративные политики | Confluence API | BAAI/bge-m3 (1024) |
-| `general_best_practices` | OWASP/CWE база знаний | https://owasp.org/www-project-top-ten | BAAI/bge-m3 (1024) |
+| `internal_policies` | Корпоративные политики безопасности | Confluence API | BAAI/bge-m3 (1024) |
 | `code_repo` | AST-чанки кода | Tree-sitter парсер | BAAI/bge-m3 (1024) |
 
 ### 2.2 Apache Kafka — Брокер сообщений
@@ -42,12 +41,7 @@
 
 ## 3. Слой приложения (Application Layer)
 
-### 3.1 OWASP Seeder Service
-
-- **Seed Script**: Загрузка OWASP/CWE правил в Qdrant
-- Запускается один раз при развёртывании системы
-
-### 3.2 Confluence Ingestion Service
+### 3.1 Confluence Ingestion Service
 
 - **HTML Parser**: извлечение текста из Confluence страниц
 - **Qdrant Indexer**: заливка в векторную БД
@@ -82,20 +76,17 @@
 - Понимает 100+ языков (включая русский)
 - Обучен на коде и естественном языке
 
-### 3.6 Audit Worker (LangGraph)
+### 3.4 Audit Worker (Zero-Shot LangGraph)
 
 Поток обработки одной единицы кода:
 
 ```
-[retrieve_general] ─┐
-                   ├─▶ [analyze] ─▶ [validate] ─▶ PostgreSQL
-[retrieve_internal] ─┘
+[retrieve_internal_rules] ➜ [zero_shot_analyze] ➜ [validate] ➜ PostgreSQL
 ```
 
-- **retrieve_general**: поиск в OWASP (Qdrant) — параллельно
-- **retrieve_internal**: поиск в корпоративных политиках (Qdrant) — параллельно
-- **analyze**: LLM-сравнение кода с правилами
-- **validate**: валидация, сохранение в PostgreSQL
+- **retrieve_internal_rules**: поиск ТОЛЬКО 7 корпоративных политик как zero-shot контекст
+- **zero_shot_analyze**: Zero-Shot LLM анализ - независимый поиск ВСЕХ уязвимостей с CWE-ID
+- **validate**: валидация CWE формата, grounding и guardrails, сохранение в PostgreSQL
 
 #### Схема таблицы audit_results
 
@@ -159,11 +150,10 @@ CREATE INDEX idx_audit_results_audit_id ON audit_results(audit_id);
 | 4 | Keycloak | Auth | Аутентификация и авторизация пользователей |
 | 5 | Langfuse | Observability | Мониторинг и трассировка LLM запросов |
 | 6 | Internal Rules Ingestion | App | Загрузка корпоративных политик (JSON/Confluence API) |
-| 7 | OWASP Seeder | App | Seed OWASP/CWE базы знаний |
-| 8 | API Service | App | Эндпоинты |
-| 9 | Indexer Service | App | Парсинг + индексация кода |
-| 10 | Embedding Service | App | Эмбеддинги (BAAI/bge-m3) |
-| 11 | Audit Worker | App | Обработка аудита |
+| 7 | API Service | App | Эндпоинты |
+| 8 | Indexer Service | App | Парсинг + индексация кода |
+| 9 | Embedding Service | App | Эмбеддинги (BAAI/bge-m3) |
+| 10 | Audit Worker | App | Zero-Shot обработка аудита |
 
 ---
 

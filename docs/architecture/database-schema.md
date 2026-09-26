@@ -92,8 +92,7 @@ CREATE INDEX idx_audit_results_severity ON audit_results(severity);
 
 | Коллекция | Назначение | Размерность | Distance |
 |-----------|------------|-------------|----------|
-| `internal_policies` | Корпоративные политики (Internal Rules) | 1024 | Cosine |
-| `general_best_practices` | OWASP/CWE база знаний | 1024 | Cosine |
+| `internal_policies` | Корпоративные политики безопасности (Internal Rules) | 1024 | Cosine |
 | `code_repo` | AST-чанки кода репозитория | 1024 | Cosine |
 
 ### Структура точек (Points)
@@ -110,22 +109,6 @@ CREATE INDEX idx_audit_results_severity ON audit_results(severity);
     "source": "internal_rules",
     "url": "https://internal-rules.company.com/...",
     "created_at": "2024-01-01T00:00:00Z"
-  }
-}
-```
-
-#### general_best_practices
-
-```json
-{
-  "id": "uuid",
-  "vector": [float, ...],  // 1024 dim
-  "payload": {
-    "title": "CWE-89: SQL Injection",
-    "text": "Описание уязвимости и рекомендации",
-    "source": "owasp-top-10",  // или "cwe-top-25"
-    "url": "https://owasp.org/...",
-    "severity": "Critical"
   }
 }
 ```
@@ -179,8 +162,6 @@ TextIndex(
 │  ▼                          │  internal_policies                    │
 │  audit_results              │     (vector → text)                  │
 │  (findings JSONB)           │                                       │
-│                              │  general_best_practices               │
-│                              │     (vector → text)                  │
 └──────────────────────────────┴──────────────────────────────────────┘
 ```
 
@@ -188,6 +169,6 @@ TextIndex(
 
 1. **Аудит запущен** → `audits` (status: pending)
 2. **Индексация кода** → `code_repo` (вектора чанков)
-3. **Поиск правил** → `general_best_practices` + `internal_policies`
-4. **Результаты** → `audit_results` (JSONB)
+3. **Zero-Shot анализ** → ТОЛЬКО `internal_policies` (7 правил как контекст)
+4. **Результаты** → `audit_results` (JSONB с CWE-ID)
 5. **Готов отчёт** → `audits` (status: completed)

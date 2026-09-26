@@ -23,41 +23,41 @@
 ## Функции
 
 - Чтение из Kafka топика `audit.tasks`
-- Семантический поиск правил по эмбеддингу
-- Параллельный RAG через LangGraph (fan-out / fan-in)
-- LLM анализ кода с найденными правилами
+- Zero-shot анализ безопасности кода LLM с CWE-ID
+- Семантический поиск ТОЛЬКО 7 внутренних правил как контекст
+- LLM самостоятельно находит все уязвимости с точными CWE-ID
+- Валидация CWE формата и наличия уязвимых строк
+- Guardrails система для контроля качества результатов
 - Сохранение результатов в PostgreSQL
 - Отправка статусов в Kafka
 
 ## LangGraph Pipeline
 
 ```
-[compute_embedding] ─▶ [retrieve_general] ─▶ [retrieve_internal] ─▶ [analyze] ─▶ [validate]
+[compute_embedding] ─▶ [retrieve_internal_rules] ─▶ [zero_shot_analyze] ─▶ [validate]
 ```
 
 - **compute_embedding**: Расчёт эмбеддинга кода (1 раз, кэшируется в state)
-- **retrieve_general**: Эмбеддинг → Qdrant `general_best_practices` (OWASP, с фильтром по языку)
-- **retrieve_internal**: Эмбеддинг → Qdrant `internal_policies` (корпоративные)
-- **analyze**: LLM — сравнение кода с правилами
-- **validate**: валидация нарушений (проверка наличия уязвимых строк в коде)
+- **retrieve_internal_rules**: Эмбеддинг → Qdrant `internal_policies` (ТОЛЬКО 7 правил для zero-shot контекста)
+- **zero_shot_analyze**: Zero-Shot LLM анализ — самостоятельный поиск ВСЕХ уязвимостей с CWE-ID
+- **validate**: валидация CWE формата и наличия уязвимых строк + guardrails
 
 ## Как работает
 
 1. Получает чанк кода из Kafka
 2. Автоматически определяет язык программирования
 3. Рассчитывает эмбеддинг кода (BAAI/bge-m3, 1024 dim)
-4. Параллельно ищет релевантные правила в Qdrant через LangGraph:
-   - Общие правила (OWASP) — с фильтром по языку программирования
-   - Корпоративные политики
-5. LLM анализирует код с найденными правилами через структурированный промпт
-6. **Применяется система Guardrails** для валидации результатов:
-   - Проверка JSON-структуры ответов LLM
-   - Проверка grounding (наличие уязвимых строк в коде)
-   - Обнаружение галлюцинаций (соответствие rule_id)
-   - Консистентность severity-уровней
-   - Качество объяснений
-   - Обнаружение дубликатов
-   - Контекстная релевантность
+4. Находит ТОЛЬКО 7 наиболее релевантных внутренних правил из Qdrant как zero-shot augmentation
+5. **Zero-Shot анализ** LLM:
+   - LLM самостоятельно сканирует код на ВСЕ категории уязвимостей
+   - Определяет точные CWE-ID из стандарта MITRE CWE
+   - Находит точные строки кода с уязвимостями
+   - Использует внутренние правила(7 шт) только как контекст
+6. **Валидация Zero-Shot результатов**:
+   - Проверка формата CWE-ID (CWE-XXX pattern)
+   - Проверка наличия уязвимых строк в коде (grounding)
+   - Guardrails для качества: JSON структура, severity consistency, качественные объяснения
+   - Обнаружение галлюцинаций и дубликатов
 7. Результаты валидации сохраняются в PostgreSQL
 8. Статус отправляется в Kafka
 
@@ -123,12 +123,12 @@ CREATE INDEX idx_audit_results_audit_id ON audit_results(audit_id);
 ```json
 [
   {
-    "rule_id": "ID правила",
-    "rule_url": "URL на правило (внешний источник, например, CWE или OWASP)",
+    "rule_id": "CWE-ID уязвимости (например: CWE-89)",
+    "rule_url": "URL на MITRE CWE описание",
     "repository_url": "Прямая ссылка на файл правила в репозитории",
     "severity": "Critical | High | Medium | Low",
-    "explanation": "Объяснение нарушения",
-    "vulnerable_line": "Уязвимая строка кода"
+    "explanation": "Объяснение уязвимости",
+    "vulnerable_line": "Точная строка кода с уязвимостью"
   }
 ]
 ```
@@ -138,7 +138,7 @@ CREATE INDEX idx_audit_results_audit_id ON audit_results(audit_id);
 | Сервис | Назначение |
 |--------|------------|
 | Kafka | Топик `audit.tasks` (вход), `audit.status` (выход) |
-| Qdrant | Коллекции `internal_policies`, `general_best_practices` |
+| Qdrant | Коллекция `internal_policies` |
 | Embedding Service | Эмбеддинги (BAAI/bge-m3, 1024 dim) |
 | PostgreSQL | Таблица `audit_results` |
 | Foundation Models API | LLM для анализа кода |

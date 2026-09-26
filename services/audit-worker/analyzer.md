@@ -1,29 +1,29 @@
 # Analyzer — механизм логического вывода
 
-Это сердце системы — **механизм логического вывода (Inference Engine)**.
+Это сердце системы — **механизм логического вывода (Inference Engine)** для Zero-Shot анализа безопасности кода.
 
 ---
 
-## Архитектура: Semantic Code Search
+## Архитектура: Zero-Shot Security Analysis
 
-Вместо генерации запросов через LLM, используем **эмбеддинг кода** для семантического поиска правил безопасности. Это:
-- Быстрее (один вызов вместо двух)
-- Точнее (семантический поиск по смыслу кода)
+LLM выполняет независимый анализ безопасности кода, используя свои знания о CWE-ID и уязвимостях, с минимальным контекстом.
+
+**Ключевое отличие:** LLM не зависит от внешних наборов правил и самостоятельно идентифицирует уязвимости.
 
 ---
 
-## Pipeline (оптимизированный)
+## Pipeline (Zero-Shot оптимизирован)
 
 ```
-[compute_embedding] ─▶ [retrieve_general] ─▶ [retrieve_internal] ─▶ [analyze] ─▶ [validate]
+[compute_embedding] ─▶ [retrieve_internal_rules] ─▶ [zero_shot_analyze] ─▶ [validate]
 ```
 
 **Шаги:**
-1. Расчёт эмбеддинга кода (один раз, кэшируется в state)
-2. Эмбеддинг → Qdrant `general_best_practices` (OWASP, с фильтром по языку)
-3. Эмбеддинг → Qdrant `internal_policies` (корпоративные)
-4. LLM анализирует код с найденными правилами
-5. Валидация и сохранение в PostgreSQL
+1. **compute_embedding**: Расчёт эмбеддинга кода (один раз, кэшируется в state)
+2. **retrieve_internal_rules**: Эмбеддинг → Qdrant `internal_policies` (ТОЛЬКО 7 правил как контекст)
+3. **zero_shot_analyze**: Zero-Shot LLM анализ — самостоятельный поиск ВСЕХ уязвимостей с CWE-ID
+4. **validate**: Валидация CWE формата + grounding + guardrails
+5. **хранение**: Сохранение результатов в PostgreSQL
 
 ---
 
@@ -38,91 +38,96 @@ def compute_embedding(state: AuditState) -> dict:
     return {"code_embedding": embedding or []}
 ```
 
-Поиск с фильтром по языку программирования:
+Поиск ТОЛЬКО 7 наиболее релевантных внутренних правил:
 
 ```python
-# Семантический поиск в Qdrant
+# Семантический поиск ТОЛЬКО в internal policies
 results = client.search(
-    collection_name="general_best_practices",
+    collection_name="internal_policies",
     query_vector=embedding,
-    limit=3,
-    query_filter={
-        "must": [
-            {"key": "source", "match": {"value": "owasp-top-10"}},
-            {"key": "lang", "match": {"value": lang}}  # Фильтр по языку
-        ]
-    }
+    limit=7  # ТОЛЬКО 7 правил для zero-shot контекста
 )
 ```
 
-**Почему это лучше:**
-- Код семантически близкий к SQL-injection правилам → найдет даже если нет явных ключевых слов
-- Один вызов эмбеддинга вместо двух (до/после LLM)
-- Фильтр по языку исключает нерелевантные правила
+**Почему именно 7:**
+- Достаточно контекста для улучшения качества анализа
+- Перегрузка не требует больших вычислений
+- Оптимальный баланс между контекстом и скоростью
 
 ---
 
-## Шаг 2: Последовательный RAG
+## Шаг 2: Zero-Shot LLM Анализ кода
 
-Эмбеддинг кэшируется в state, затем используется для обоих поисков:
-
-```python
-# LangGraph (последовательный пайплайн)
-workflow.set_entry_point("compute_embedding")
-workflow.add_edge("compute_embedding", "retrieve_general")
-workflow.add_edge("retrieve_general", "retrieve_internal")
-workflow.add_edge("retrieve_internal", "analyze")
-```
-
-Это надёжнее для MVP: эмбеддинг рассчитывается 1 раз, затем переиспользуется.
-
----
-
-## Шаг 3: LLM Анализ кода
-
-LLM получает код + найденные правила через SystemMessage:
+LLM получает код + ТОЛЬКО 7 внутренних правил как минимальный контекст через Zero-Shot промпт:
 
 ```python
 from langchain_core.messages import SystemMessage
 
-SYSTEM_PROMPT = """Ты — строгий аудитор безопасности.
+SYSTEM_PROMPT = """Ты — экспертная система Zero-Shot анализа безопасности кода.
+Твоя задача: самостоятельно найти ВСЕ уязвимости безопасности в предоставленном коде,
+определить их CWE-ID и точные строки.
 
-### ПРАВИЛА БЕЗОПАСНОСТИ:
+## ВНУТРЕННИЕ ПРАВИЛА (ДОПОЛНЕНИЕ, ТОЛЬКО 7 ШТ):
 {rules}
 
-### КОД ДЛЯ АУДИТА:
+## КОД ДЛЯ АНАЛИЗА:
 Язык: {lang} | Файл: {file_path}
 {code}
+
+## ТРЕБОВАНИЯ:
+- Найди **ВСЕ** уязвимости, даже если их много
+- Точные CWE ID (формат: CWE-XXX)
+- Точные строки кода (обязательно должны существовать)
+- Если уязвимостей нет - верни пустой массив
 
 ФОРМАТ ОТВЕТА (JSON):
 {{
   "violations": [
     {{
-      "rule_id": "CWE-XX",
-      "rule_url": "URL на правило (внешний источник)",
-      "repository_url": "Прямая ссылка на файл правила в репозитории",
+      "rule_id": "CWE-XXX",
+      "rule_url": "https://cwe.mitre.org/data/definitions/XXX.html",
       "severity": "Critical | High | Medium | Low",
-      "explanation": "Почему код нарушает правило",
-      "vulnerable_line": "Строка кода"
+      "explanation": "Детальное описание уязвимости",
+      "vulnerable_line": "Точная строка кода"
     }}
   ]
-}}
-Если нарушений нет: {{"violations": []}}"""
+}}"""
 
-# Явная передача SystemMessage
+# Zero-Shot анализ с минимальным контекстом
 response = llm.invoke([SystemMessage(content=system_prompt)])
+```
+
+**Key Features:**
+- **Independent reasoning**: LLM использует свои знания о CWE-ID и уязвимостях
+- **7 rules augmentation**: Внутренние правила улучшают качество, но не ограничивают
+- **Comprehensive coverage**: Сканирование ВСЕХ категорий уязвимостей
+
+---
+
+## Шаг 3: Валидация Zero-Shot результатов
+
+1. **CWE Format Check:** `CWE-\d+` pattern validation
+2. **Grounding Check:** Проверяем, что `vulnerable_line` содержится в коде
+3. **Guardrails:** JSON структура, severity consistency, качество объяснений
+
+```python
+# CWE format validation
+CWE_PATTERN = r'^CWE-\d+$'
+validated_cwe_violations = [
+    v for v in grounded_violations
+    if re.match(CWE_PATTERN, v.get("rule_id", ""))
+]
+
+# Grounding validation
+grounded_violations = [
+    v for v in violations
+    if v.get("vulnerable_line", "") in code
+]
 ```
 
 ---
 
-## Шаг 4: Валидация
-
-1. **Grounding Check:** Проверяем, что `vulnerable_line` содержится в коде
-2. **Определение severity:** По максимальной критичности
-
----
-
-## Шаг 5: Надёжность Kafka
+## Шаг 4: Надёжность Kafka
 
 Ручной коммит offset после успешной записи в PostgreSQL:
 
@@ -133,7 +138,7 @@ consumer = KafkaConsumer(
     enable_auto_commit=False  # Ручной коммит
 )
 
-# Обработка
+# Обработка с надежной дубль-блокировкой
 try:
     violations, severity = process_task(task)
     save_result_to_db(...)    # Запись в БД
@@ -183,3 +188,37 @@ def is_grounded(vuln_line: str, code: str) -> bool:
     ratio = difflib.SequenceMatcher(None, line_normalized, code_normalized).ratio()
     return ratio > 0.8
 ```
+
+---
+
+## Zero-Shot Преимущества
+
+### По сравнению с традиционным RAG:
+- **Broader coverage**: LLM находит уязвимости вне предоставленных правил
+- **CWE accuracy**: Точные идентификаторы из MITRE CWE standard
+- **Adaptable**: Автоматически адаптируется к новым типам уязвимостей
+- **Context efficient**: 7 правил вместо сотен для покрытия
+
+### Ограничения:
+- **Hallucination risk**: Требуется строгий guardrails контроль
+- **CWE awareness**: LLM должен быть обучен на CWE стандарт
+- **Grounding verification**: Необходима проверка уязвимых строк
+
+---
+
+## Архитектурные решения
+
+### Why 7 Internal Rules?
+- **Context coverage**: Достаточно для улучшения качества без перегрузки
+- **Performance**: Баланс между глубиной и скоростью
+- **Focus**: Специфические корпоративные политики безопасности
+
+### Zero-Shot Primary, Rules Secondary
+- **LLM leads**: Независимый анализ всех категорий уязвимостей
+- **Rules augment**: Улучшают точность специфических контекстов
+- **Validation ensures**: CWE format и grounding гарантируют качество
+
+### Guardrails Essential
+- **CWE validation**: Формат CWE-\d+ pattern
+- **Grounding check**: Строки должны существовать в коде
+- **Quality control**: JSON структура, severity consistency

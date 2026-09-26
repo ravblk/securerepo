@@ -7,7 +7,7 @@ sequenceDiagram
     participant Qdrant as Qdrant (Vector DB)
     participant Embed as Embedding Service
     participant Worker as Audit Worker
-    participant LLM as LLM (Qwen-Coder-Next)
+    participant LLM as LLM (Zero-Shot Coder)
 
     User->>API: POST /audit/start<br/>(repo_url, branch, lang)
     API->>SQL: Создать запись аудита<br/>(status=pending)
@@ -29,12 +29,10 @@ sequenceDiagram
         par Параллельная обработка чанков
             loop Для каждой задачи из audit.tasks
                 Kafka->>Worker: Получить задачу<br/>(chunk_id, code, file_path, audit_id)
-                Worker->>Qdrant: Поиск общих правил<br/>(general_best_practices, фильтр по lang)
-                Qdrant-->>Worker: OWASP правила
-                Worker->>Qdrant: Поиск внутренних правил<br/>(internal_policies)
-                Qdrant-->>Worker: Корпоративные политики
-                Worker->>LLM: Анализ кода<br/>(код + правила)
-                LLM-->>Worker: Нарушения (violations)
+                Worker->>Qdrant: Поиск ТОЛЬКО 7 внутренних правил<br/>(internal_policies, zero-shot контекст)
+                Qdrant-->>Worker: 7 корпоративных политик
+                Worker->>LLM: Zero-Shot анализ кода<br/>(код + 7 правил как контекст)
+                LLM-->>Worker: Нарушения (violations с CWE-ID)
                 Worker->>SQL: Сохранить результат<br/>(audit_results)
                 Worker->>Kafka: Отправить статус "completed"<br/>(audit.status)
             end
@@ -52,5 +50,5 @@ sequenceDiagram
     Note over User,API: Получение отчёта
     User->>API: GET /audit/{audit_id}/report
     API->>SQL: Запросить результаты<br/>(SELECT * FROM audit_results)
-    SQL-->>API: Список findings
+    SQL-->>API: Список findings с CWE-ID
     API-->>User: {audit_id, results: [...]}

@@ -42,21 +42,21 @@ class VectorSearchHelper:
     @staticmethod
     def filter_security_points(points: List, skip_fields: Optional[List[str]] = None,
                               required_fields: Optional[List[str]] = None) -> List[Dict]:
-        """Filter points to only include security rules."""
+        """Filter points to include internal security rules only."""
         if skip_fields is None:
             skip_fields = ["vulnerability_type", "sample_id", "code"]
         if required_fields is None:
-            required_fields = ["title", "source"]
+            required_fields = ["title", "text"]
 
         filtered_points = []
         for point in points:
             payload = point.payload
 
-            # Skip points with vulnerability code
+            # Skip points with vulnerability code (examples, not rules)
             if any(key in payload for key in skip_fields):
                 continue
 
-            # Skip points without required fields
+            # Keep only points with required fields for internal policies
             if not all(key in payload for key in required_fields):
                 continue
 

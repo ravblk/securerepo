@@ -68,7 +68,7 @@ class AuditWorkflow:
             return {"code_embedding": []}
 
     def _retrieve_general_rules(self, state: dict) -> dict:
-        """Retrieve general security rules from Qdrant using hybrid semantic + keyword search."""
+        """Retrieve exactly 7 most relevant internal security rules as zero-shot augmentation context."""
         embedding = state.get("code_embedding", [])
         code = state.get("code", "")
         lang = state.get("lang", "python")
@@ -78,115 +78,24 @@ class AuditWorkflow:
             return {"general_rules": []}
 
         try:
-            # Try hybrid search first (recommended method)
-            rules = self._qdrant_service.search_general_rules_hybrid(
+            # Try hybrid search first (recommended method) - retrieves exactly 7 most relevant internal rules
+            rules = self._qdrant_service.search_rules(
                 embedding=embedding,
                 code=code,
                 lang=lang,
-                limit=3
+                limit=7  # ТОЛЬКО 7 внутренних правил для zero-shot augmentation
             )
 
-            # Fallback to semantic-only if hybrid search fails or returns empty results
+            # Fallback to basic semantic search if hybrid search fails or returns empty results
             if not rules:
-                logger.info("Hybrid search returned empty results, falling back to semantic search")
-                rules = self._qdrant_service.search_general_rules(
+                logger.info("Hybrid search returned empty results, falling back to basic semantic search")
+                rules = self._qdrant_service.search_basic_rules(
                     embedding=embedding,
                     lang=lang,
-                    limit=3
+                    limit=7  # ТОЛЬКО 7 внутренних правил
                 )
 
-            logger.info(f"Retrieved {len(rules)} general rules via hybrid search")
-
-            if rules and isinstance(rules, list) and len(rules) > 0:
-                first_rule = rules[0]
-                if isinstance(first_rule, dict):
-                    logger.debug(f"First general rule structure: {first_rule}")
-                    logger.debug(f"Keys in first rule: {list(first_rule.keys())}")
-                else:
-                    logger.warning(f"First rule is not a dict: {type(first_rule)}")
-            elif rules:
-                logger.warning(f"Rules is not a list: {type(rules)}")
-
-            # Log to Langfuse
-            if self._current_trace and audit_id:
-                langfuse_service.create_event(
-                    trace_id=self._current_trace.id,
-                    name="retrieve_general_rules",
-                    metadata={
-                        "rules_count": len(rules),
-                        "search_type": "hybrid" if rules else "semantic_fallback",
-                        "language": lang
-                    }
-                )
-
-            return {"general_rules": rules}
-        except Exception as e:
-            # If hybrid search fails completely, fall back to semantic search
-            logger.warning(f"Hybrid search failed: {e}, falling back to semantic search")
-            try:
-                rules = self._qdrant_service.search_general_rules(
-                    embedding=embedding,
-                    lang=lang,
-                    limit=3
-                )
-                logger.info(f"Retrieved {len(rules)} general rules via fallback semantic search")
-
-                # Log failure to Langfuse
-                if self._current_trace and audit_id:
-                    langfuse_service.create_event(
-                        trace_id=self._current_trace.id,
-                        name="retrieve_general_rules",
-                        metadata={
-                            "rules_count": len(rules),
-                            "search_type": "semantic_fallback",
-                            "error": str(e),
-                            "language": lang
-                        }
-                    )
-
-                return {"general_rules": rules}
-            except Exception as fallback_error:
-                logger.error(f"Both hybrid and semantic search failed: {fallback_error}")
-
-                # Log complete failure to Langfuse
-                if self._current_trace and audit_id:
-                    langfuse_service.create_event(
-                        trace_id=self._current_trace.id,
-                        name="retrieve_general_rules_failed",
-                        metadata={
-                            "error": str(fallback_error),
-                            "language": lang
-                        }
-                    )
-
-                return {"general_rules": []}
-
-    def _retrieve_internal_rules(self, state: dict) -> dict:
-        """Retrieve internal security policies from Qdrant using hybrid semantic + keyword search."""
-        embedding = state.get("code_embedding", [])
-        code = state.get("code", "")
-        audit_id = state.get("audit_id")
-
-        if not embedding:
-            return {"internal_rules": []}
-
-        try:
-            # Try hybrid search first (recommended method for internal policies)
-            rules = self._qdrant_service.search_internal_rules_hybrid(
-                embedding=embedding,
-                code=code,
-                limit=2
-            )
-
-            # Fallback to semantic-only if hybrid search fails or returns empty results
-            if not rules:
-                logger.info("Hybrid search returned empty results, falling back to semantic search")
-                rules = self._qdrant_service.search_internal_rules(
-                    embedding=embedding,
-                    limit=2
-                )
-
-            logger.info(f"Retrieved {len(rules)} internal rules via hybrid search")
+            logger.info(f"Retrieved {len(rules)} INTERNAL SECURITY RULES as zero-shot augmentation")
 
             if rules and isinstance(rules, list) and len(rules) > 0:
                 first_rule = rules[0]
@@ -205,20 +114,23 @@ class AuditWorkflow:
                     name="retrieve_internal_rules",
                     metadata={
                         "rules_count": len(rules),
-                        "search_type": "hybrid" if rules else "semantic_fallback"
+                        "search_type": "hybrid" if rules else "semantic_fallback",
+                        "language": lang,
+                        "source": "internal_policies_only"
                     }
                 )
 
-            return {"internal_rules": rules}
+            return {"general_rules": rules}
         except Exception as e:
             # If hybrid search fails completely, fall back to semantic search
             logger.warning(f"Hybrid search failed: {e}, falling back to semantic search")
             try:
-                rules = self._qdrant_service.search_internal_rules(
+                rules = self._qdrant_service.search_basic_rules(
                     embedding=embedding,
-                    limit=2
+                    lang=lang,
+                    limit=7  # ТОЛЬКО 7 внутренних правил
                 )
-                logger.info(f"Retrieved {len(rules)} internal rules via fallback semantic search")
+                logger.info(f"Retrieved {len(rules)} INTERNAL SECURITY RULES via fallback semantic search")
 
                 # Log failure to Langfuse
                 if self._current_trace and audit_id:
@@ -228,11 +140,13 @@ class AuditWorkflow:
                         metadata={
                             "rules_count": len(rules),
                             "search_type": "semantic_fallback",
-                            "error": str(e)
+                            "error": str(e),
+                            "language": lang,
+                            "source": "internal_policies_only"
                         }
                     )
 
-                return {"internal_rules": rules}
+                return {"general_rules": rules}
             except Exception as fallback_error:
                 logger.error(f"Both hybrid and semantic search failed: {fallback_error}")
 
@@ -242,14 +156,22 @@ class AuditWorkflow:
                         trace_id=self._current_trace.id,
                         name="retrieve_internal_rules_failed",
                         metadata={
-                            "error": str(fallback_error)
+                            "error": str(fallback_error),
+                            "language": lang,
+                            "source": "internal_policies_only"
                         }
                     )
 
-                return {"internal_rules": []}
+                return {"general_rules": []}
+
+    def _retrieve_internal_rules(self, state: dict) -> dict:
+        """Retrieve internal security policies - now combined with general rules."""
+        # Internal rules are now included in general rules search
+        logger.info("Internal rules retrieval is now integrated with general rules search")
+        return {"internal_rules": []}
 
     def _analyze_code(self, state: dict) -> dict:
-        """Analyze code using LLM with retrieved rules and Langfuse tracing."""
+        """Analyze code using LLM ZERO-SHOT security analysis with internal rules augmentation."""
         code = state["code"]
         file_path = state["file_path"]
         lang = state.get("lang", "python")
@@ -273,65 +195,76 @@ class AuditWorkflow:
 
             return {"violations": [], "severity": "None"}
 
-        # Format rules for LLM prompt (только rule_url)
-        updated_rules = []
+        # Format internal rules for LLM prompt (zero-shot augmentation context)
+        context_rules = []
         rule_count = 0
 
         try:
-            # Проверяем, что general_rules и internal_rules являются списками
+            # Format internal rules for zero-shot augmentation context
             if not isinstance(general_rules, (list, tuple)):
                 logger.error(f"general_rules is not a list, type: {type(general_rules)}")
                 general_rules = []
 
-            if not isinstance(internal_rules, (list, tuple)):
-                logger.error(f"internal_rules is not a list, type: {type(internal_rules)}")
-                internal_rules = []
-
-            for rule in general_rules + internal_rules:
+            for rule in general_rules:
                 try:
-                    # Проверяем, каждое правило является словарем
-                    if not isinstance(rule, dict):
-                        logger.warning(f"Warning: rule is not a dict, type: {type(rule)}, content: {rule}")
+                    # Проверка типа правила с защитой от ошибок
+                    if rule is None:
+                        logger.warning("Skipping None rule")
                         continue
 
-                    rule_count += 1
-                    # Проверяем наличие необходимых ключей и добавляем значения по умолчанию
-                    safe_rule = {
-                        "rule_id": rule.get("rule_id", "unknown"),
-                        "text": rule.get("text", "")[:500],
-                        "url": rule.get("url", "")
-                    }
-                    updated_rules.append(safe_rule)
+                    if not isinstance(rule, (dict, str)):
+                        logger.warning(f"Warning: rule is not a dict or str, type: {type(rule)}, content: {rule}")
+                        continue
 
-                    # Логирование подсвечников для отладки
+                    # Преобразование строки в dict если необходимо
+                    if isinstance(rule, str):
+                        try:
+                            # Простая строка без дополнительной обработки
+                            safe_rule = {"rule_id": f"internal-rule-{rule_count}", "text": rule[:500], "url": ""}
+                        except Exception as e:
+                            logger.warning(f"Failed to parse rule as string: {e}")
+                            continue
+                    else:
+                        # dict rule
+                        rule_count += 1
+                        safe_rule = {
+                            "rule_id": rule.get("rule_id", f"internal-{rule_count}"),
+                            "text": rule.get("text", "")[:500],
+                            "url": rule.get("url", "")
+                        }
+
+                    # Добавляем обработку длинных desc и防护 от слишком больших строк
+                    if len(safe_rule["text"]) > 500:
+                        safe_rule["text"] = safe_rule["text"][:500]
+
+                    context_rules.append(safe_rule)
+
+                    # Логирование для отладки
                     if rule_count <= 2:
-                        logger.debug(f"Rule {rule_count} - Keys: {list(rule.keys())}, rule_id: {safe_rule.get('rule_id', 'unknown')}")
+                        logger.debug(f"Context Rule {rule_count} - rule_id: {safe_rule.get('rule_id', 'unknown')}")
 
                 except Exception as e:
-                    logger.error(f"Error processing individual rule: {e}, rule content: {rule}")
+                    logger.error(f"Error processing individual context rule: {e}, rule content: {rule}")
                     continue
 
-            logger.info(f"Formatted {len(updated_rules)} rules for LLM prompt from {rule_count} total rules")
+            logger.info(f"Formatted {len(context_rules)} internal rules for ZERO-SHOT augmentation context")
 
         except Exception as e:
-            logger.error(f"Error in rule formatting preprocessing: {e}, general_rules type: {type(general_rules)}, internal_rules type: {type(internal_rules)}")
-            # Используем запасной вариант - пустой список правил
-            updated_rules = []
+            logger.error(f"Error in context rule formatting: {e}, general_rules type: {type(general_rules)}")
+            context_rules = []
 
-        # Генерируем текст правил для промпта только если есть правила
-        if not updated_rules:
-            logger.warning("No valid rules available for LLM prompt")
-            rules_text = "No available rules"
+        # Генерируем текст внутренних правил для zero-shot контекста
+        if not context_rules:
+            logger.info("No context rules available - using pure ZERO-SHOT analysis")
+            context_rules_text = "КОНТЕКСТ ВНУТРЕННИХ ПРАВИЛ: Отсутствует (чистый Zero-Shot анализ)"
         else:
-            rules_text = "\n".join(
-                f"[{i}] Rule ID: {rule.get('rule_id', 'unknown')}\n"
-                f"    Description: {rule.get('text', '')}\n"
-                f"    External URL (rule_url): {rule.get('url', '') if rule.get('url') else 'N/A'}\n"
-                for i, rule in enumerate(updated_rules, 1)
+            context_rules_text = "\n".join(
+                f"• [{i}] {rule.get('rule_id', 'unknown')}: {rule.get('text', '')[:200]}"
+                for i, rule in enumerate(context_rules, 1)
             )
 
         system_prompt = SYSTEM_PROMPT.format(
-            rules=rules_text,
+            rules=context_rules_text,  # Internal rules as zero-shot augmentation context
             lang=lang,
             file_path=file_path,
             code=code
@@ -341,10 +274,10 @@ class AuditWorkflow:
             llm = self._llm_service.get_llm()
             response = llm.invoke([
                 SystemMessage(content=system_prompt),
-                HumanMessage(content="Analyze the code above and return violations in JSON format.")
+                HumanMessage(content="Perform comprehensive security analysis and return all vulnerabilities found.")
             ])
 
-            logger.debug(f"LLM response: {response.content}")
+            logger.info(f"ZERO-SHOT LLM analysis completed for code chunk: {file_path}")
 
             # Extract JSON from response with multiple strategies
             violations, parse_error = self._parse_llm_response(response.content)
@@ -378,27 +311,28 @@ class AuditWorkflow:
                 )
                 severity = max_sev.get("severity", "Low")
 
-            logger.info(f"Code analysis completed: {len(violations)} violations, severity: {severity}")
+            logger.info(f"ZERO-SHOT code analysis completed: {len(violations)} vulnerabilities, max severity: {severity}")
 
             # Log successful analysis to Langfuse
             if self._current_trace and audit_id:
                 langfuse_service.create_event(
                     trace_id=self._current_trace.id,
-                    name="analyze_code",
+                    name="zero_shot_analysis",
                     metadata={
                         "violations_count": len(violations),
                         "severity": severity,
-                        "rules_used": len(updated_rules),
-                        "language": lang
+                        "context_rules_count": len(context_rules),
+                        "language": lang,
+                        "analysis_type": "zero_shot_with_internal_augmentation"
                     }
                 )
 
-                # Create score for security audit effectiveness
+                # Create score for zero-shot security analysis effectiveness
                 langfuse_service.create_score(
                     trace_id=self._current_trace.id,
-                    name="security_violations",
+                    name="zero_shot_security_violations",
                     value=len(violations),
-                    comment=f"Found {len(violations)} security violations, max severity: {severity}"
+                    comment=f"Zero-Shot found {len(violations)} security vulnerabilities with CWE IDs, max severity: {severity}"
                 )
 
             return {"violations": violations, "severity": severity}
@@ -490,48 +424,57 @@ class AuditWorkflow:
         return repaired
 
     def _ground_and_validate(self, state: dict) -> dict:
-        """Validate that vulnerable lines exist in code and apply guardrails."""
+        """Validate ZERO-SHOT LLM findings: CWE IDs, vulnerable lines, and apply guardrails."""
         code = state["code"]
         violations = state["violations"]
         lang = state.get("lang", "python")
         audit_id = state.get("audit_id")
-        general_rules = state.get("general_rules", [])
+        general_rules = state.get("general_rules", [])  # Internal rules for context only
         internal_rules = state.get("internal_rules", [])
 
-        # Basic grounding check (existing functionality)
-        validated = [
+        # Grounding validation: ensure vulnerable lines exist in code
+        grounded_violations = [
             v for v in violations
             if v.get("vulnerable_line", "") and v.get("vulnerable_line") in code
         ]
 
-        removed_count_baseline = len(violations) - len(validated)
+        removed_grounding = len(violations) - len(grounded_violations)
+        if removed_grounding > 0:
+            logger.info(f"Zero-shot grounding: removed {removed_grounding} violations with invalid code references")
 
-        if removed_count_baseline > 0:
-            logger.info(f"Baseline grounding: removed {removed_count_baseline} invalid references")
+        # CWE ID validation: ensure proper CWE format (CWE-XXX pattern)
+        CWE_PATTERN = r'^CWE-\d+$'
+        validated_cwe_violations = [
+            v for v in grounded_violations
+            if v.get("rule_id", "") and re.match(CWE_PATTERN, str(v.get("rule_id", "")))
+        ]
 
-        # Apply comprehensive guardrails
-        all_rules = general_rules + internal_rules
+        removed_cwe_format = len(grounded_violations) - len(validated_cwe_violations)
+        if removed_cwe_format > 0:
+            logger.info(f"Zero-shot CWE validation: removed {removed_cwe_format} violations with invalid CWE format")
+
+        # Apply comprehensive guardrails for zero-shot results
+        all_available_context = general_rules + internal_rules
         filtered_violations, guardrail_results = guardrail_engine.validate_output(
-            violations=validated,
+            violations=validated_cwe_violations,
             code=code,
-            available_rules=all_rules,
-            strict_mode=False  # Set to True for strict operation mode
+            available_rules=all_available_context,  # Use as context, not strict matching
+            strict_mode=False  # Zero-shot should be more permissive
         )
 
         total_removed = len(violations) - len(filtered_violations)
-        guardrail_removed = len(validated) - len(filtered_violations)
+        guardrail_removed = len(validated_cwe_violations) - len(filtered_violations)
 
-        # Log guardrail validation results
+        # Log zero-shot validation results
         logger.info(
-            f"Guardrail validation: {len(filtered_violations)}/{len(violations)} violations passed "
-            f"({total_removed} removed)"
+            f"Zero-shot validation: {len(filtered_violations)} validated vulnerabilities "
+            f"({total_removed} total removed: {removed_grounding} grounding + {removed_cwe_format} CWE format + {guardrail_removed} guardrails)"
         )
 
-        # Get and log guardrail statistics
+        # Get and log detailed guardrail statistics
         guardrail_statistics = guardrail_engine.get_guardrail_statistics(guardrail_results)
         logger.info(
             f"Guardrail statistics: {guardrail_statistics['passed_guardrails']}/{guardrail_statistics['total_guardrails']} passed, "
-            f"{guardrail_statistics['total_violations_filtered']} total filtered, "
             f"pass_rate: {guardrail_statistics['pass_rate']:.1f}%"
         )
 
@@ -546,12 +489,18 @@ class AuditWorkflow:
             else:
                 logger.info(f"{status} {check_name}: {result.message}")
 
-        # Log guardrail results to Langfuse
+        # Log zero-shot validation results to Langfuse
         if self._current_trace and audit_id:
             langfuse_service.create_event(
                 trace_id=self._current_trace.id,
-                name="guardrail_validation",
-                metadata=guardrail_statistics
+                name="zero_shot_guardrail_validation",
+                metadata={
+                    **guardrail_statistics,
+                    "grounding_removed": removed_grounding,
+                    "cwe_format_removed": removed_cwe_format,
+                    "total_removed": total_removed,
+                    "analysis_type": "zero_shot_cwe_validation"
+                }
             )
 
         return {"violations": filtered_violations}
