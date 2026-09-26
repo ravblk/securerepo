@@ -37,7 +37,7 @@ spec:
         node: node-audit
       containers:
       - name: audit-worker
-        image: xravil/securerepo-audit-worker:v0.0.8-amd64
+        image: xravil/securerepo-audit-worker:v0.0.10-amd64
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:

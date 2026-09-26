@@ -1,6 +1,6 @@
 """Hybrid search ranking for security rules."""
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from .code_analyzer import CodeAnalysisResult
 

@@ -33,18 +33,6 @@ CATEGORY_KEY_TO_ENUM = {
 }
 
 
-@dataclass
-class ScanPattern:
-    """Security scanning pattern configuration."""
-    category: str
-    keywords: List[str]
-    regex_patterns: List[str] = None
-
-    def __post_init__(self):
-        if self.regex_patterns is None:
-            self.regex_patterns = []
-
-
 class SecurityPatternsConfig:
     """Configuration for security patterns by language."""
 

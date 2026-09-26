@@ -30,6 +30,13 @@ class QdrantError(HTTPException):
         super().__init__(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
 
 
+class ContentQualityError(HTTPException):
+    """Exception raised when scraped content fails quality validation."""
+
+    def __init__(self, detail: str = "Content quality validation failed"):
+        super().__init__(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
+
+
 def register_exception_handlers(app):
     """Register custom exception handlers for the FastAPI app."""
 
@@ -58,5 +65,12 @@ def register_exception_handlers(app):
     async def qdrant_error_handler(request, exc):
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": exc.detail}
+        )
+
+    @app.exception_handler(ContentQualityError)
+    async def content_quality_error_handler(request, exc):
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"detail": exc.detail}
         )
