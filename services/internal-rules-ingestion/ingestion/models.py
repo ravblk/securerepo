@@ -33,6 +33,7 @@ class Page(BaseModel):
     id: int
     title: str
     url: str
+    lang: Optional[str] = None
 
 
 class HealthResponse(BaseModel):

@@ -17,7 +17,7 @@ data:
   HTTP_BACKOFF_MAX: "30.0"
   HTTP_TIMEOUT: "240"
   EMBEDDING_TIMEOUT: "240"
-  PAGES_JSON: '[{"id":1,"title":"Go Architectural Plan: Building a SAST Tool in Go","url":"https://github.com/lahiruramesh/go-sast/blob/master/docs/sast-architecture.md"},{"id":2,"title":"Go Extended Architecture","url":"https://github.com/lahiruramesh/go-sast/blob/master/docs/sast-extended-architecture.md"},{"id":3,"title":"Go Multi-Repository Architecture","url":"https://github.com/lahiruramesh/go-sast/blob/master/docs/sast-multirepo-gaps.md"},{"id":4,"title":"Python Security","url":"https://github.com/sinchanapatgar/CodeAlpha_SecureCodingReview/blob/main/secure_code_review.py"}]'
+  PAGES_JSON: '[{"id":1,"title":"Go Architectural Plan: Building a SAST Tool in Go","lang":"go","url":"https://github.com/lahiruramesh/go-sast/blob/master/docs/sast-architecture.md"},{"id":2,"title":"Go Extended Architecture","lang":"go","url":"https://github.com/lahiruramesh/go-sast/blob/master/docs/sast-extended-architecture.md"},{"id":3,"title":"Go Multi-Repository Architecture","lang":"go","url":"https://github.com/lahiruramesh/go-sast/blob/master/docs/sast-multirepo-gaps.md"},{"id":4,"title":"Python Security","lang":"python","url":"https://github.com/sinchanapatgar/CodeAlpha_SecureCodingReview/blob/main/secure_code_review.py"}]'
 ---
 # Internal Rules Ingestion Service
 apiVersion: v1
@@ -53,7 +53,7 @@ spec:
         node: node-app
       containers:
       - name: internal-rules-ingestion
-        image: xravil/securerepo-internal-rules-ingestion:v0.0.1-amd64
+        image: xravil/securerepo-internal-rules-ingestion:v0.0.2-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8001

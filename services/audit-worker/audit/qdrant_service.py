@@ -67,8 +67,8 @@ class QdrantService:
             code_analysis = self.analyze_code_security(code, lang)
             self._log_code_analysis(code_analysis, "internal security rules")
 
-            # Step 2: Get top 7 internal security rules for zero-shot augmentation
-            all_internal_rules = self._get_all_internal_rules(embedding)
+            # Step 2: Get top 7 internal security rules for zero-shot augmentation with language filtering
+            all_internal_rules = self._get_all_internal_rules(embedding, lang)
 
             logger.info(f"Retrieved {len(all_internal_rules)} internal security rules for zero-shot augmentation")
 
@@ -104,7 +104,7 @@ class QdrantService:
             return []
 
         try:
-            return self._search_internal_rules_basic(embedding, limit)
+            return self._search_internal_rules_basic(embedding, lang, limit)
         except Exception as e:
             error_msg = f"Internal rules search error: {e}"
             logger.error(error_msg)
@@ -125,6 +125,7 @@ class QdrantService:
     def _get_all_internal_rules(
         self,
         embedding: List[float],
+        lang: Optional[str] = None,  # Добавляем языковой фильтр
         internal_limit: int = 200  # Увеличенный лимит для получения всех правил
     ) -> List[dict]:
         """Get ALL internal security rules from internal_policies collection."""
@@ -147,7 +148,8 @@ class QdrantService:
                 if not all(key in payload for key in ["title", "text"]):
                     continue
 
-                processed_point = self.vector_search_helper.process_search_point(point, embedding)
+                # Pass lang_filter to process_search_point
+                processed_point = self.vector_search_helper.process_search_point(point, embedding, lang)
                 if processed_point:
                     internal_rules_points.append(processed_point)
 
@@ -166,6 +168,7 @@ class QdrantService:
     def _semantic_search_internal_rules(
         self,
         embedding: List[float],
+        lang: Optional[str] = None,
         internal_limit: int = 30
     ) -> List[dict]:
         """Semantic search for internal security policies."""
@@ -185,7 +188,8 @@ class QdrantService:
                 if not all(key in payload for key in ["title", "text"]):
                     continue
 
-                processed_point = self.vector_search_helper.process_search_point(point, embedding)
+                # Pass lang_filter to process_search_point
+                processed_point = self.vector_search_helper.process_search_point(point, embedding, lang)
                 if processed_point:
                     internal_rules_points.append(processed_point)
 
@@ -201,6 +205,7 @@ class QdrantService:
     def _search_internal_rules_basic(
         self,
         embedding: List[float],
+        lang: Optional[str] = None,
         limit: int = 20
     ) -> List[dict]:
         """Basic semantic search for internal security policies."""
@@ -220,7 +225,8 @@ class QdrantService:
                 if not all(key in payload for key in ["title", "text"]):
                     continue
 
-                processed_point = self.vector_search_helper.process_search_point(point, embedding)
+                # Pass lang_filter to process_search_point
+                processed_point = self.vector_search_helper.process_search_point(point, embedding, lang)
                 if processed_point:
                     internal_rules_points.append(processed_point)
 

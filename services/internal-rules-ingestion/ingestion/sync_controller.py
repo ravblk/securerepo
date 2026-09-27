@@ -100,6 +100,7 @@ class SyncController:
         """Process a single page and create a Qdrant point, like owasp-seeder."""
         url = page.get("url")
         title = page.get("title", f"Page {page.get('id')}")
+        lang = page.get("lang")
 
         logger.info(f"Processing page {idx}: {title} from {url}")
 
@@ -126,6 +127,7 @@ class SyncController:
                     "text": text[:settings.text_limit],
                     "source": "gitlab-handbook",
                     "ingested_at": datetime.utcnow().isoformat(),
+                    "lang": lang,
                 }
             )
 

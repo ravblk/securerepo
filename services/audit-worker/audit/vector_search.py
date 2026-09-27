@@ -65,10 +65,16 @@ class VectorSearchHelper:
         return filtered_points
 
     @staticmethod
-    def process_search_point(point, embedding: List[float]) -> Optional[Dict]:
+    def process_search_point(point, embedding: List[float], lang_filter: Optional[str] = None) -> Optional[Dict]:
         """Process a single search point with similarity calculation."""
         try:
             vector_search = VectorSearchHelper()
+
+            # Filter by language if lang_filter is specified
+            if lang_filter and lang_filter != "":
+                point_lang = point.payload.get("lang", "")
+                if point_lang and point_lang != lang_filter:
+                    return None
 
             point_vector = point.vector
             similarity = vector_search.compute_cosine_similarity(embedding, point_vector)
@@ -92,5 +98,6 @@ class VectorSearchHelper:
         return {
             "rule_id": rule['rule_id'],
             "text": rule['text'][:max_length],
-            "url": rule['url']
+            "url": rule['url'],
+            "lang": rule.get('lang', "")
         }
