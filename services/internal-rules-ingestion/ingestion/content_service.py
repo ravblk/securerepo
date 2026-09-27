@@ -18,8 +18,17 @@ class ContentService:
         self._retry_service = RetryService()
         self._user_agent = "Mozilla/5.0 (compatible; Internal-Rules-Ingestion/2.0)"
 
+    def convert_github_to_raw(self, url: str) -> str:
+        """Convert GitHub blob URL to raw URL."""
+        if 'github.com' in url and '/blob/' in url:
+            return url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/')
+        return url
+
     def get_text_from_url(self, url: str) -> str:
         """Extract text content from a web page."""
+        # Convert GitHub blob URLs to raw URLs for proper content extraction
+        url = self.convert_github_to_raw(url)
+
         def fetch_func():
             headers = {
                 "User-Agent": self._user_agent,
@@ -37,20 +46,31 @@ class ContentService:
                 name=f"GET {url[:80]}"
             )
 
-            soup = BeautifulSoup(response.content, "lxml")
+            # Check if the response is raw markdown (GitHub raw URLs)
+            if 'raw.githubusercontent.com' in url or url.endswith('.md'):
+                # Raw markdown content - return directly
+                text = response.text
+                logger.info(f"Extracted {len(text)} characters from raw markdown: {url}")
 
-            # Remove scripts and styles
-            for script in soup(["script", "style", "nav", "footer", "header"]):
-                script.decompose()
+                # Clean up text
+                text = self._clean_text(text)
+                return text
+            else:
+                # HTML content - use BeautifulSoup
+                soup = BeautifulSoup(response.content, "lxml")
 
-            # Extract text
-            text = soup.get_text(separator="\n")
+                # Remove scripts and styles
+                for element in soup(["script", "style", "nav", "footer", "header"]):
+                    element.decompose()
 
-            # Clean up text
-            text = self._clean_text(text)
+                # Extract text
+                text = soup.get_text(separator="\n")
 
-            logger.info(f"Extracted {len(text)} characters from {url}")
-            return text
+                # Clean up text
+                text = self._clean_text(text)
+
+                logger.info(f"Extracted {len(text)} characters from HTML: {url}")
+                return text
 
         except Exception as e:
             error_msg = f"Error fetching {url}: {e}"
