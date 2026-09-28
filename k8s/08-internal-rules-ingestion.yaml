@@ -53,7 +53,7 @@ spec:
         node: node-app
       containers:
       - name: internal-rules-ingestion
-        image: xravil/securerepo-internal-rules-ingestion:v0.0.3-amd64
+        image: xravil/securerepo-internal-rules-ingestion:v0.0.5-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8001

@@ -63,17 +63,37 @@ class QdrantService:
             # Don't raise - collection might exist already
 
     def upsert_points(self, points: list[PointStruct]) -> None:
-        """Upsert points into Qdrant with retry logic."""
+        """Upsert points into Qdrant with retry logic and batch processing."""
         if not points:
             logger.warning("No points to upsert")
             return
 
-        def upsert_func():
-            return self._client.upsert(
-                collection_name=settings.collection_name,
-                points=points,
-                wait=True,
-            )
+        # Process points in batches to avoid Qdrant limits
+        batch_size = 50  # Reduced from full batch to avoid memory/size limits
+        total_points = len(points)
+
+        for i in range(0, total_points, batch_size):
+            batch = points[i:i + batch_size]
+
+            def upsert_func():
+                return self._client.upsert(
+                    collection_name=settings.collection_name,
+                    points=batch,
+                    wait=True,
+                )
+
+            try:
+                self._retry_service.execute_with_retry(
+                    upsert_func,
+                    name=f"upsert {len(batch)} points ({i+1}-{min(i+batch_size, total_points)}/{total_points})"
+                )
+                logger.info(f"Successfully upsert batch {i//batch_size + 1}: {len(batch)} points")
+            except Exception as e:
+                error_msg = f"Failed to upsert batch {i//batch_size + 1}: {e}"
+                logger.error(error_msg)
+                raise QdrantError(error_msg)
+
+        logger.info(f"Successfully upsert all {total_points} points to Qdrant")
 
         try:
             self._retry_service.execute_with_retry(

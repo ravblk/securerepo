@@ -220,7 +220,7 @@ class AuditWorkflow:
                     if isinstance(rule, str):
                         try:
                             # Простая строка без дополнительной обработки
-                            safe_rule = {"rule_id": f"internal-rule-{rule_count}", "text": rule[:500], "url": ""}
+                            safe_rule = {"rule_id": f"internal-rule-{rule_count}", "text": rule[:3000], "url": ""}
                         except Exception as e:
                             logger.warning(f"Failed to parse rule as string: {e}")
                             continue
@@ -229,13 +229,13 @@ class AuditWorkflow:
                         rule_count += 1
                         safe_rule = {
                             "rule_id": rule.get("rule_id", f"internal-{rule_count}"),
-                            "text": rule.get("text", "")[:500],
+                            "text": rule.get("text", "")[:3000],
                             "url": rule.get("url", "")
                         }
 
-                    # Добавляем обработку длинных desc и防护 от слишком больших строк
-                    if len(safe_rule["text"]) > 500:
-                        safe_rule["text"] = safe_rule["text"][:500]
+                    # Добавляем обработку длинных desc и защита от слишком больших строк
+                    if len(safe_rule["text"]) > 3000:
+                        safe_rule["text"] = safe_rule["text"][:3000]
 
                     context_rules.append(safe_rule)
 
@@ -259,7 +259,7 @@ class AuditWorkflow:
             context_rules_text = "КОНТЕКСТ ВНУТРЕННИХ ПРАВИЛ: Отсутствует (чистый Zero-Shot анализ)"
         else:
             context_rules_text = "\n".join(
-                f"• [{i}] {rule.get('rule_id', 'unknown')}: {rule.get('text', '')[:200]}"
+                f"• [{i}] {rule.get('rule_id', 'unknown')}: {rule.get('text', '')[:1000]}"
                 for i, rule in enumerate(context_rules, 1)
             )
 

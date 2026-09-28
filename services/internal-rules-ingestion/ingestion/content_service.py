@@ -24,6 +24,107 @@ class ContentService:
             return url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/')
         return url
 
+    def split_content_by_headers(self, content: str, base_id: str) -> List[dict]:
+        """
+        Split content into logical chunks by headers.
+
+        This function handles:
+        - Markdown headers: ##, ###
+        - ALL CAPS lines
+        - Keywords: Chapter, Раздел, Section, Глава, Chapter
+        - Structured format: 1., 1.1, -, *, lines ending with colon
+
+        Args:
+            content: The content to split
+            base_id: Base ID for generating chunk IDs (e.g., "doc-100")
+
+        Returns:
+            List of dictionaries with 'header', 'content', 'id' keys
+        """
+        if not content or not content.strip():
+            return []
+
+        import re
+
+        lines = content.split('\n')
+        chunks = []
+        current_chunk = {"header": "", "content": [], "id": ""}
+
+        # More specific header patterns - avoid markdown lists etc.
+        markdown_pattern = re.compile(r'^(#{2,3})\s+(.+)')  ##, ### (not # main title)
+        all_caps_pattern = re.compile(r'^[A-ZА-ЯЁ][A-ZА-ЯЁ0-9\s]+$')  # ALL CAPS
+        keyword_pattern = re.compile(r'^(Chapter|Раздел|Section|Глава|Chapter)\s+\d+[:.]')  # Keywords
+        numbered_pattern = re.compile(r'^(\d+\.\d+)\s+')  # 1.1, 2.3, etc.
+        single_digit_pattern = re.compile(r'^(\d+)\.\s+\d+')  # "1. Introduction" style
+
+        for line in lines:
+            stripped_line = line.strip()
+            if not stripped_line:
+                continue
+
+            # Skip main document title (# Header level 1)
+            if stripped_line.startswith('# '):
+                continue
+
+            # Check if line is a header
+            is_header = False
+            header_match = None
+
+            # Check markdown headers (##, ###)
+            if markdown_pattern.match(stripped_line):
+                is_header = True
+                header_match = stripped_line
+
+            # Check ALL CAPS (must be short, not content)
+            elif all_caps_pattern.match(stripped_line) and len(stripped_line) < 60:
+                is_header = True
+                header_match = stripped_line
+
+            # Check keyword patterns
+            elif keyword_pattern.match(stripped_line):
+                is_header = True
+                header_match = stripped_line
+
+            # Check numbered patterns like "1.2" but not markdown lists like "- item"
+            elif numbered_pattern.match(stripped_line):
+                is_header = True
+                header_match = stripped_line
+
+            # Check single digit like "1. Introduction" (not markdown "1. item")
+            elif single_digit_pattern.match(stripped_line):
+                is_header = True
+                header_match = stripped_line
+
+            if is_header:
+                # Save previous chunk if exists
+                if current_chunk["header"] or current_chunk["content"]:
+                    chunk_id = f"{base_id}-{len(chunks)}"
+                    current_chunk["id"] = chunk_id
+                    current_chunk["content"] = '\n'.join(current_chunk["content"]).strip()
+                    chunks.append(current_chunk)
+
+                # Start new chunk
+                current_chunk = {
+                    "header": header_match,
+                    "content": [],
+                    "id": ""
+                }
+            else:
+                current_chunk["content"].append(line)
+
+        # Add final chunk
+        if current_chunk["header"] or current_chunk["content"]:
+            chunk_id = f"{base_id}-{len(chunks)}"
+            current_chunk["id"] = chunk_id
+            current_chunk["content"] = '\n'.join(current_chunk["content"]).strip()
+            chunks.append(current_chunk)
+
+        # Filter out chunks that have header but empty content
+        valid_chunks = [chunk for chunk in chunks
+                        if not chunk['header'] or len(chunk['content']) > 10]
+
+        return valid_chunks
+
     def get_text_from_url(self, url: str) -> str:
         """Extract text content from a web page."""
         # Convert GitHub blob URLs to raw URLs for proper content extraction

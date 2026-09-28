@@ -1,7 +1,7 @@
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from qdrant_client.models import PointStruct
 
@@ -75,16 +75,16 @@ class SyncController:
         return sync_id
 
     def _process_pages(self, pages: list[dict], sync_id: str) -> list[PointStruct]:
-        """Process pages sequentially, like owasp-seeder."""
+        """Process pages sequentially with logical chunk splitting."""
         points: list[PointStruct] = []
 
         for idx, page in enumerate(pages):
             try:
-                point = self._process_page(page, idx)
-                if point:
-                    points.append(point)
+                page_points = self._process_page(page, idx)
+                if page_points:
+                    points.extend(page_points)
                     self._sync_status[sync_id]["pages_processed"] += 1
-                    logger.info(f"✓ Processed page {idx + 1}/{len(pages)}: {page.get('title', 'Unknown')}")
+                    logger.info(f"✓ Processed page {idx + 1}/{len(pages)}: {page.get('title', 'Unknown')} → {len(page_points)} chunks")
                 else:
                     self._sync_status[sync_id]["pages_failed"] += 1
                     logger.warning(f"✗ Failed to process page {idx + 1}/{len(pages)}: {page.get('url', 'Unknown')}")
@@ -96,11 +96,12 @@ class SyncController:
 
         return points
 
-    def _process_page(self, page: dict, idx: int) -> Optional[PointStruct]:
-        """Process a single page and create a Qdrant point, like owasp-seeder."""
+    def _process_page(self, page: dict, idx: int) -> List[PointStruct]:
+        """Process a single page and create multiple Qdrant points by splitting content by headers."""
         url = page.get("url")
         title = page.get("title", f"Page {page.get('id')}")
         lang = page.get("lang")
+        page_id = page.get("id", idx)
 
         logger.info(f"Processing page {idx}: {title} from {url}")
 
@@ -109,30 +110,54 @@ class SyncController:
             text = self._content_service.get_text_from_url(url)
             if not text:
                 logger.warning(f"Failed to extract text from {url}")
-                return None
+                return []
 
-            # Get embedding
-            embedding = self._embedding_service.get_embedding(text)
-            if not embedding:
-                logger.warning(f"Failed to get embedding for {url}")
-                return None
+            # Split content by headers for logical chunking
+            chunks = self._content_service.split_content_by_headers(text, f"page-{page_id}")
 
-            # Create point
-            point = PointStruct(
-                id=page.get("id"),
-                vector=embedding,
-                payload={
-                    "title": title,
-                    "url": url,
-                    "text": text[:settings.text_limit],
-                    "source": "gitlab-handbook",
-                    "ingested_at": datetime.utcnow().isoformat(),
-                    "lang": lang,
-                }
-            )
+            if not chunks:
+                logger.warning(f"No chunks found for {url}")
+                return []
 
-            logger.info(f"Successfully processed: {title[:50]}")
-            return point
+            logger.info(f"Split content into {len(chunks)} logical chunks")
+
+            points = []
+            for chunk_idx, chunk in enumerate(chunks):
+                # Get embedding for this chunk
+                chunk_content = chunk["content"]
+                if not chunk_content or len(chunk_content) < 50:  # Skip very short chunks
+                    continue
+
+                embedding = self._embedding_service.get_embedding(chunk_content)
+                if not embedding:
+                    logger.warning(f"Failed to get embedding for chunk {chunk_idx}")
+                    continue
+
+                # Generate unique point ID based on page ID and chunk index
+                # Ensure ID is an integer (Qdrant requires consistent type)
+                point_id = int(str(page_id) + str(chunk_idx).zfill(2))
+
+                # Create point
+                point = PointStruct(
+                    id=point_id,
+                    vector=embedding,
+                    payload={
+                        "title": f"{title} - {chunk['header']}" if chunk['header'] else title,
+                        "url": url,
+                        "text": chunk_content[:settings.text_limit],
+                        "header": chunk['header'],
+                        "chunk_index": chunk_idx,
+                        "source": "gitlab-handbook",
+                        "ingested_at": datetime.utcnow().isoformat(),
+                        "lang": lang,
+                    }
+                )
+
+                points.append(point)
+                logger.debug(f"Created point {point_id}: {chunk['header'][:30]}... ({len(chunk_content)} chars)")
+
+            logger.info(f"Successfully processed {len(points)} points from {title}")
+            return points
 
         except Exception as e:
             logger.error(f"Error processing page {page.get('url')}: {e}")
