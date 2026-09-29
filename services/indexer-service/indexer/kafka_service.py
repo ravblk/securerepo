@@ -59,7 +59,7 @@ class KafkaService:
         except Exception as e:
             logger.exception("Failed to send status for audit %s: %s", audit_id, e)
 
-    def send_audit_tasks(self, audit_id: str, points: list) -> None:
+    def send_audit_tasks(self, audit_id: str, points: list, lang: str = "python") -> None:
         if not self._producer:
             logger.warning("Producer not initialized, cannot send audit tasks for audit %s", audit_id)
             return
@@ -70,6 +70,7 @@ class KafkaService:
                 "code": point.payload["code"],
                 "file_path": point.payload["file_path"],
                 "audit_id": audit_id,
+                "lang": point.payload.get("lang", lang),  # Include language for Symbol-Context
                 "chunk_index": i,
                 "total_chunks": total,
             }

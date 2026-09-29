@@ -11,15 +11,17 @@ from indexer.kafka_service import KafkaService
 from indexer.models import RepoMessage
 from indexer.qdrant_service import QdrantService
 from indexer.repo_service import clone_repo, collect_chunks
+from indexer.symbols_service import get_symbols_service
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger("indexer")
 
 kafka_service = KafkaService()
 qdrant_service: Optional[QdrantService] = None
+symbols_service = get_symbols_service()
 
 
 def process_repo(message: RepoMessage) -> None:
@@ -35,8 +37,16 @@ def process_repo(message: RepoMessage) -> None:
         return
 
     logger.info(f"Collecting code chunks from {repo_path}")
-    chunks = collect_chunks(repo_path)
-    logger.info("Found %d code chunks", len(chunks))
+    chunks, symbols = collect_chunks(repo_path, message.audit_id)
+    logger.info("Found %d code chunks and %d symbols", len(chunks), len(symbols))
+
+    # Save symbols to database for Symbol-Context
+    if symbols:
+        try:
+            saved_symbols = symbols_service.save_symbols(symbols, message.audit_id)
+            logger.info(f"✓ Saved {saved_symbols} symbols to database for Symbol-Context")
+        except Exception as e:
+            logger.warning(f"✗ Failed to save symbols to database: {e}. Continuing without symbol context.")
 
     if not chunks:
         logger.warning("No code chunks found, skipping embedding")
@@ -71,7 +81,7 @@ def process_repo(message: RepoMessage) -> None:
     kafka_service.send_status(
         message.audit_id, "indexed", total_chunks=len(points),
     )
-    kafka_service.send_audit_tasks(message.audit_id, points)
+    kafka_service.send_audit_tasks(message.audit_id, points, message.lang)
     logger.info(f"Completed processing for {message.audit_id}")
 
 

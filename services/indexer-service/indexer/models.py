@@ -1,5 +1,4 @@
 from typing import Optional
-
 from pydantic import BaseModel
 
 
@@ -19,3 +18,16 @@ class CodeChunk(BaseModel):
     code: str
     start_line: int
     end_line: int
+
+
+class CodeSymbol(BaseModel):
+    """Model for a code symbol (function/method) stored in database for Symbol-Context."""
+    audit_id: str
+    symbol: str
+    symbol_type: str
+    file_path: str
+    start_line: int
+    end_line: int
+    code: str
+    length: int
+    package: Optional[str] = None

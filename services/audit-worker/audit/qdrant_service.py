@@ -1,105 +1,113 @@
 """
-Qdrant Service Refactored - Modular and Clean Implementation
-Service for Qdrant vector database operations with hybrid search support.
+Qdrant Service - Simplified implementation for internal rules retrieval
+Service for Qdrant vector database operations with basic semantic search.
 """
 import logging
 from typing import List, Optional
 
+import numpy as np
 from qdrant_client import QdrantClient
 
 from .config import settings
 from .exceptions import QdrantError
-from .qdrant_config import SecurityPatternsConfig, SecurityCategory
-from .code_analyzer import CodeAnalyzer, CodeAnalysisResult
-from .vector_search import VectorSearchHelper
-from .search_ranking import HybridRankingEngine
 
 logger = logging.getLogger(__name__)
 
 
 class QdrantService:
-    """Service for Qdrant vector database operations with hybrid search support."""
+    """Service for Qdrant vector database operations with semantic search."""
 
     def __init__(self, url: Optional[str] = None) -> None:
-        """Initialize Qdrant service with modular components."""
+        """Initialize Qdrant service."""
         self._client = QdrantClient(url=url or settings.qdrant_url)
         self._default_lang = "python"
-
-        # Initialize modular components
-        self.code_analyzer = CodeAnalyzer(self._default_lang)
-        self.config = SecurityPatternsConfig()
-        self.vector_search_helper = VectorSearchHelper()
+        self._collection_name = "internal_policies"
 
     def get_client(self) -> QdrantClient:
         """Get the Qdrant client instance."""
         return self._client
 
-    def analyze_code_security(self, code: str, lang: str) -> CodeAnalysisResult:
-        """Analyze code for security-relevant keywords and patterns."""
-        return self.code_analyzer.analyze_code_security(code, lang)
+    def _process_search_point(self, point, embedding: List[float], lang: Optional[str] = None) -> Optional[dict]:
+        """Process a search point with language filtering and similarity calculation."""
+        payload = point.payload
 
-    # ========== Hybrid Search Methods ==========
+        # Skip points without required fields
+        if not all(key in payload for key in ["title", "text"]):
+            return None
+
+        # Language filter if provided
+        if lang is not None:
+            point_lang = payload.get("lang", "").lower()
+            if point_lang and point_lang != lang.lower():
+                # Allow English rules for all languages
+                if point_lang != "en":
+                    return None
+
+        # Extract vector if available
+        if hasattr(point, 'vector') and point.vector:
+            point_vector = point.vector
+        else:
+            return None
+
+        # Calculate cosine similarity
+        embedding_array = np.array(embedding)
+        point_vector_array = np.array(point_vector)
+
+        dot_product = np.dot(embedding_array, point_vector_array)
+        norm_a = np.linalg.norm(embedding_array)
+        norm_b = np.linalg.norm(point_vector_array)
+
+        if norm_a == 0 or norm_b == 0:
+            similarity = 0.0
+        else:
+            similarity = dot_product / (norm_a * norm_b)
+
+        return {
+            "rule_id": payload.get("rule_id", payload.get("title", "")),
+            "title": payload.get("title", ""),
+            "text": payload.get("text", ""),
+            "url": payload.get("url", ""),
+            "category": payload.get("category", ""),
+            "similarity": similarity,
+            "lang": payload.get("lang", "")
+        }
+
+    def format_search_result(self, result: dict) -> dict:
+        """Format search result for response."""
+        return {
+            "rule_id": result.get("rule_id", ""),
+            "text": result.get("text", ""),
+            "url": result.get("url", ""),
+            "similarity": result.get("similarity", 0.0)
+        }
 
     def search_rules(
         self,
         embedding: List[float],
         code: str,
         lang: str,
-        limit: int = 7  # ТОЛЬКО 7 внутренних правил как дополнение к zero-shot
+        limit: int = 3  # ТОЛЬКО 3 внутренних правила как дополнение к zero-shot
     ) -> List[dict]:
         """
         Search internal security rules for ZERO-SHOT augmentation.
 
-        Returns exactly 7 most relevant internal rules as context for LLM zero-shot analysis.
+        Returns exactly 3 most relevant internal rules as context for LLM zero-shot analysis.
         The main analysis is performed by LLM independently using its security knowledge.
 
         How it works:
-        1. Analyzes code for security-relevant keywords and patterns
-        2. Uses semantic similarity to find most relevant internal rules
-        3. Returns top 7 rules as augmentation context for LLM
-        4. LLM performs independent zero-shot vulnerability detection with CWE IDs
+        1. Uses semantic similarity to find most relevant internal rules
+        2. Returns top 3 rules as augmentation context for LLM
+        3. LLM performs independent zero-shot vulnerability detection with CWE IDs
         """
-        if not embedding:
-            return []
-
-        try:
-            # Step 1: Analyze code for security-relevant patterns
-            code_analysis = self.analyze_code_security(code, lang)
-            self._log_code_analysis(code_analysis, "internal security rules")
-
-            # Step 2: Get top 7 internal security rules for zero-shot augmentation with language filtering
-            all_internal_rules = self._get_all_internal_rules(embedding, lang)
-
-            logger.info(f"Retrieved {len(all_internal_rules)} internal security rules for zero-shot augmentation")
-
-            # Step 3: Apply keyword-based scoring and ranking
-            ranking_engine = HybridRankingEngine('internal')
-            ranked_rules = ranking_engine.rank_results(all_internal_rules, code_analysis)
-
-            # Step 4: Return exactly 7 most relevant rules for zero-shot context
-            top_rules = ranked_rules[:limit]  # HARD LIMIT: exactly 7 rules
-
-            self._log_search_results(top_rules, "internal rules (zero-shot augmentation)")
-
-            return self.vector_search_helper.format_search_results_batch(
-                [VectorSearchHelper.format_search_result(rule) for rule in top_rules]
-            )
-
-        except Exception as e:
-            error_msg = f"Internal rules search error: {e}"
-            logger.error(error_msg)
-            logger.debug("Returning empty list instead of raising error for graceful degradation")
-            return []
-
-    # ========== Legacy Semantic Search Methods ==========
+        return self.search_basic_rules(embedding, lang, limit)
 
     def search_basic_rules(
         self,
         embedding: List[float],
         lang: str,
-        limit: int = 7  # ТОЛЬКО 7 внутренних правил для zero-shot
+        limit: int = 3  # ТОЛЬКО 3 внутренних правил для zero-shot
     ) -> List[dict]:
-        """Search for exactly 7 most relevant internal security rules for zero-shot augmentation."""
+        """Search for exactly 3 most relevant internal security rules for zero-shot augmentation."""
         if not embedding:
             return []
 
@@ -111,102 +119,11 @@ class QdrantService:
             logger.debug("Returning empty list instead of raising error for graceful degradation")
             return []
 
-    # ========== Internal Semantic Search Methods (DEPRECATED - integrated with all rules search) ==========
-
-    def search_internal_rules(
-        self,
-        embedding: List[float],
-        limit: int = 2
-    ) -> List[dict]:
-        """Search for internal security policies - DEPRECATED: now integrated with all rules search."""
-        logger.warning("search_internal_rules is deprecated - internal policies are now included in general rules search")
-        return []
-
-    def _get_all_internal_rules(
-        self,
-        embedding: List[float],
-        lang: Optional[str] = None,  # Добавляем языковой фильтр
-        internal_limit: int = 200  # Увеличенный лимит для получения всех правил
-    ) -> List[dict]:
-        """Get ALL internal security rules from internal_policies collection."""
-        internal_rules_points = []
-
-        try:
-            # Search ONLY in internal_policies collection
-            logger.info("Searching ALL internal policies...")
-            internal_points_data = self._client.scroll(
-                collection_name="internal_policies",
-                limit=internal_limit,
-                with_payload=True,
-                with_vectors=True
-            )
-
-            # Process all internal policy points
-            for point in internal_points_data[0]:
-                # Check basic fields for internal policies
-                payload = point.payload
-                if not all(key in payload for key in ["title", "text"]):
-                    continue
-
-                # Pass lang_filter to process_search_point
-                processed_point = self.vector_search_helper.process_search_point(point, embedding, lang)
-                if processed_point:
-                    internal_rules_points.append(processed_point)
-
-            logger.info(f"Found {len(internal_rules_points)} internal security rules")
-
-            # Sort by similarity descending
-            internal_rules_points.sort(key=lambda x: x['similarity'], reverse=True)
-
-            return internal_rules_points
-
-        except Exception as e:
-            error_msg = f"Error retrieving internal rules: {e}"
-            logger.error(error_msg)
-            return []
-
-    def _semantic_search_internal_rules(
-        self,
-        embedding: List[float],
-        lang: Optional[str] = None,
-        internal_limit: int = 30
-    ) -> List[dict]:
-        """Semantic search for internal security policies."""
-        try:
-            points_data = self._client.scroll(
-                collection_name="internal_policies",
-                limit=internal_limit,
-                with_payload=True,
-                with_vectors=True
-            )
-
-            # Filter and process points
-            internal_rules_points = []
-            for point in points_data[0]:
-                # Skip points without basic fields
-                payload = point.payload
-                if not all(key in payload for key in ["title", "text"]):
-                    continue
-
-                # Pass lang_filter to process_search_point
-                processed_point = self.vector_search_helper.process_search_point(point, embedding, lang)
-                if processed_point:
-                    internal_rules_points.append(processed_point)
-
-            # Sort by similarity
-            internal_rules_points.sort(key=lambda x: x['similarity'], reverse=True)
-            return internal_rules_points
-
-        except Exception as e:
-            error_msg = f"Semantic internal rules search error: {e}"
-            logger.error(error_msg)
-            return []
-
     def _search_internal_rules_basic(
         self,
         embedding: List[float],
         lang: Optional[str] = None,
-        limit: int = 20
+        limit: int = 3
     ) -> List[dict]:
         """Basic semantic search for internal security policies."""
         try:
@@ -225,8 +142,8 @@ class QdrantService:
                 if not all(key in payload for key in ["title", "text"]):
                     continue
 
-                # Pass lang_filter to process_search_point
-                processed_point = self.vector_search_helper.process_search_point(point, embedding, lang)
+                # Process search point with language filtering
+                processed_point = self._process_search_point(point, embedding, lang)
                 if processed_point:
                     internal_rules_points.append(processed_point)
 
@@ -242,7 +159,7 @@ class QdrantService:
             self._log_search_results(top_rules, "internal rules semantic")
 
             return [
-                VectorSearchHelper.format_search_result(rule)
+                self.format_search_result(rule)
                 for rule in top_rules
             ]
 
@@ -252,22 +169,10 @@ class QdrantService:
             logger.debug("Returning empty list instead of raising error for graceful degradation")
             return []
 
-    # ========== Utility Methods ==========
-
-    def _log_code_analysis(self, analysis: CodeAnalysisResult, context: str):
-        """Log code analysis results."""
-        logger.info(
-            f"{context.capitalize()} code analysis found: "
-            f"{len(analysis.suspicious_keywords)} keywords, "
-            f"{len(analysis.suspicious_functions)} suspicious functions, "
-            f"{len(analysis.library_calls)} library calls, "
-            f"{len(analysis.security_categories)} security categories"
-        )
-
     def _log_search_results(self, results: List[dict], context: str):
         """Log search results with scores."""
         if results:
-            scores_str = ", ".join([f"{r['hybrid_score']:.3f}" for r in results])
+            scores_str = ", ".join([f"{r['similarity']:.3f}" for r in results])
             logger.info(f"Selected {len(results)} best rules via {context} (scores: [{scores_str}])")
         else:
             logger.warning(f"No best rules found via {context}")
@@ -281,54 +186,7 @@ class QdrantService:
         except Exception as e:
             return False, f"Qdrant connection failed: {str(e)}"
 
-    # ========== Legacy Methods for Backward Compatibility ==========
-
-    def search_general_rules_hybrid(
-        self,
-        embedding: List[float],
-        code: str,
-        lang: str,
-        limit: int = 20
-    ) -> List[dict]:
-        """DEPRECATED: Use search_rules instead."""
-        logger.warning("search_general_rules_hybrid is deprecated - use search_rules for all internal rules")
-        return self.search_rules(embedding, code, lang, limit)
-
-    def search_general_rules(
-        self,
-        embedding: List[float],
-        lang: str,
-        limit: int = 20
-    ) -> List[dict]:
-        """DEPRECATED: Use search_basic_rules instead."""
-        logger.warning("search_general_rules is deprecated - use search_basic_rules for internal rules")
-        return self.search_basic_rules(embedding, lang, limit)
-
-    def search_internal_rules_hybrid(
-        self,
-        embedding: List[float],
-        code: str,
-        limit: int = 20
-    ) -> List[dict]:
-        """DEPRECATED: Use search_rules instead."""
-        logger.warning("search_internal_rules_hybrid is deprecated - use search_rules")
-        lang = self._default_lang
-        return self.search_rules(embedding, code, lang, limit)
-
-    def search_internal_rules(
-        self,
-        embedding: List[float],
-        limit: int = 20
-    ) -> List[dict]:
-        """DEPRECATED: Use search_basic_rules instead."""
-        logger.warning("search_internal_rules is deprecated - use search_basic_rules")
-        return self.search_basic_rules(embedding, self._default_lang, limit)
-
     def is_available(self) -> bool:
         """Check if Qdrant is available."""
         available, _ = self.test_connection()
         return available
-
-
-# Add batch processing method to VectorSearchHelper
-VectorSearchHelper.format_search_results_batch = staticmethod(lambda results: results)

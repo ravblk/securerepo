@@ -37,15 +37,16 @@ class AuditController:
         lang = LanguageDetector.detect(task.file_path)
         logger.info(f"Detected language: {lang}")
 
-        # Prepare initial workflow state
+        # Prepare initial workflow state with Symbol-Context support
         initial_state = {
             "task": task,
             "code": task.code,
             "file_path": task.file_path,
             "lang": lang,
+            "audit_id": task.audit_id,  # Required for Symbol-Context
             "code_embedding": [],
-            "general_rules": [],
             "internal_rules": [],
+            "enriched_context": "",  # Symbol-Context enriched function bodies
             "violations": [],
             "severity": None,
             "auditing_sent": False

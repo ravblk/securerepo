@@ -7,6 +7,7 @@ class Settings:
     kafka_broker: str = os.getenv("KAFKA_BROKER", "kafka:9092")
     qdrant_url: str = os.getenv("QDRANT_URL", "http://qdrant:6333")
     embedding_url: str = os.getenv("EMBEDDING_URL", "http://embedding:8080")
+    postgres_url: str = os.getenv("POSTGRES_URL", "postgresql://postgres:postgres@postgres:5432/securerepo")
 
     collection_name: str = "code_repo"
     embedding_size: int = 1024

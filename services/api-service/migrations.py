@@ -328,6 +328,11 @@ def run_migrations():
             "name": "004_create_audit_results_table_with_fk",
             "description": "Create audit_results table with foreign key to audits",
             "func": create_audit_results_table_with_fk
+        },
+        {
+            "name": "005_create_symbols_table",
+            "description": "Create symbols table for Symbol-Context feature - stores function/method definitions for cross-chunk analysis",
+            "func": create_symbols_table
         }
     ]
 
@@ -357,6 +362,64 @@ def run_migrations():
     else:
         print("\n✅ All migrations completed successfully!")
         return True
+
+def create_symbols_table():
+    """
+    Migration 005: Создание таблицы symbols для Symbol-Context feature
+    Хранит определения функций/методов для cross-chunk анализа
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Удаляем таблицу если существует для чистой миграции
+        cursor.execute("""
+            DROP TABLE IF EXISTS symbols CASCADE;
+        """)
+
+        cursor.execute("""
+            CREATE TABLE symbols (
+                id SERIAL PRIMARY KEY,
+                audit_id VARCHAR(255) NOT NULL,
+                symbol VARCHAR(255) NOT NULL,
+                symbol_type VARCHAR(50) NOT NULL,
+                file_path TEXT NOT NULL,
+                start_line INTEGER NOT NULL,
+                end_line INTEGER NOT NULL,
+                code TEXT NOT NULL,
+                length INTEGER NOT NULL,
+                package VARCHAR(255),
+                created_at TIMESTAMP DEFAULT NOW(),
+                FOREIGN KEY (audit_id) REFERENCES audits(id) ON DELETE CASCADE
+            );
+        """)
+
+        # Создаём индексы для быстрого поиска
+        cursor.execute("""
+            CREATE INDEX idx_symbols_audit_id ON symbols(audit_id);
+        """)
+        cursor.execute("""
+            CREATE INDEX idx_symbols_name ON symbols(symbol);
+        """)
+        cursor.execute("""
+            CREATE INDEX idx_symbols_type ON symbols(symbol_type);
+        """)
+        # Уникальный индекс для предотвращения дубликатов
+        cursor.execute("""
+            CREATE UNIQUE INDEX idx_symbols_unique ON symbols(audit_id, symbol, file_path, start_line);
+        """)
+
+        conn.commit()
+        print("✅ Migration 005: Created symbols table for Symbol-Context feature")
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Migration 005 failed: {e}")
+        return False
+    finally:
+        cursor.close()
+        conn.close()
 
 def verify_relationships():
     """Проверка правильности установленных foreign key связей"""

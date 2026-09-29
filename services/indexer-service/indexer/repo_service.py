@@ -23,14 +23,17 @@ def clone_repo(url: str, branch: str, token: Optional[str]) -> Path:
     return clone_dir
 
 
-def collect_chunks(repo_path: Path) -> list[CodeChunk]:
+def collect_chunks(repo_path: Path, audit_id: Optional[str] = None) -> tuple[list[CodeChunk], list[dict]]:
+    """Collect code chunks and symbols from repository."""
     chunks: list[CodeChunk] = []
+    symbols: list[dict] = []
+
     for ext, lang in supported_extensions().items():
         for file_path in repo_path.rglob(f"*{ext}"):
             if settings.skip_dirs & set(file_path.parts):
                 continue
-            try:
-                chunks.extend(parse_file(file_path, lang))
-            except Exception:
-                logger.exception("Error parsing %s", file_path)
-    return chunks
+            file_chunks, file_symbols = parse_file(file_path, lang, audit_id)
+            chunks.extend(file_chunks)
+            symbols.extend(file_symbols)
+
+    return chunks, symbols

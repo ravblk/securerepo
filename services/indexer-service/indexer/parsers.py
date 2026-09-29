@@ -1,12 +1,12 @@
 import logging
+import re
 from pathlib import Path
-from typing import Optional
-
+from typing import Optional, List
 from tree_sitter import Parser
 import tree_sitter_languages
 
 from .config import settings
-from .models import CodeChunk
+from .models import CodeChunk, CodeSymbol
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +14,9 @@ _LANGUAGE_MAP = {"python": "python", "go": "go"}
 _EXTENSION_MAP = {".py": "python", ".go": "go"}
 
 _FUNCTION_NODE_TYPES = frozenset({
-    "function_definition",       # python (методы — вложены в class_definition)
-    "function_declaration",      # go: func
-    "method_declaration",        # go: method
+    "function_definition",       # python: def
+    "function_declaration",      # go: func Name() {}
+    "method_declaration",        # go: func (r *T) Name() {}
 })
 
 # Код вне функций: package-level секреты, конфиги — раньше невидимы
@@ -44,9 +44,13 @@ def _text(node, content: str) -> str:
 
 
 def _function_name(node, content: str) -> Optional[str]:
+    """Extract function name from function node."""
+
+    # Try to find identifier child
     for child in node.children:
         if child.type == "identifier":
             return _text(child, content)
+
     return None
 
 
@@ -57,6 +61,38 @@ def _cut_at_line_boundary(code: str, limit: int) -> tuple[str, bool]:
     window = code[:limit]
     nl = window.rfind("\n")
     return (window[:nl] if nl > 0 else window), True
+
+
+def _extract_package_go(content: str) -> Optional[str]:
+    """Extract package name from Go code."""
+    m = re.search(r'\bpackage\s+(\w+)', content[:2000])
+    return m.group(1) if m else None
+
+
+def _collect_symbol(node, content, file_path, symbol_name: str, symbols: List[dict], audit_id: Optional[str] = None) -> None:
+    """Collect symbol definition for Symbol-Context feature."""
+    if not symbol_name:
+        return
+
+    code = _text(node, content)
+    symbol = {
+        "symbol": symbol_name,
+        "symbol_type": node.type,
+        "file_path": str(file_path),
+        "start_line": node.start_point[0] + 1,
+        "end_line": node.end_point[0] + 1,
+        "code": code,
+        "length": node.end_byte - node.start_byte,
+    }
+
+    # Extract package for Go
+    if node.type in ["function_declaration", "method_declaration"]:
+        symbol["package"] = _extract_package_go(content)
+
+    if audit_id:
+        symbol["audit_id"] = audit_id
+
+    symbols.append(symbol)
 
 
 def _emit(chunks, file_path, code, start_line, function_name, part=None) -> None:
@@ -71,11 +107,15 @@ def _emit(chunks, file_path, code, start_line, function_name, part=None) -> None
     ))
 
 
-def _emit_function(node, content, file_path, chunks) -> None:
+def _emit_function(node, content, file_path, chunks, symbols=None) -> None:
     """Функция → один чанк; длинную режем по statement'ам тела, не теряя хвост."""
     code = _text(node, content)
     start_line = node.start_point[0] + 1
     name = _function_name(node, content)
+
+    # Сохраняем символ для Symbol-Context (если передан коллектор)
+    if symbols is not None and name:
+        _collect_symbol(node, content, file_path, name, symbols)
 
     if len(code) <= settings.max_code_length:
         _emit(chunks, file_path, code, start_line, name)
@@ -100,22 +140,24 @@ def _emit_function(node, content, file_path, chunks) -> None:
               start_line, name, part=part)
 
 
-def parse_file(file_path: Path, lang: str) -> list[CodeChunk]:
+def parse_file(file_path: Path, lang: str, audit_id: Optional[str] = None) -> tuple[list[CodeChunk], list[dict]]:
+    """Parse file and return both chunks and symbols."""
     try:
         content = file_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         logger.warning(f"Cannot read {file_path}")
-        return []
+        return [], []
 
     parser = _get_parser(lang)
     tree = parser.parse(content.encode("utf-8"))
     root = tree.root_node
 
     chunks: list[CodeChunk] = []
+    symbols: list[dict] = []
 
     def _walk(node) -> None:
         if node.type in _FUNCTION_NODE_TYPES:
-            _emit_function(node, content, file_path, chunks)
+            _emit_function(node, content, file_path, chunks, symbols)
         elif node.type in _TOP_LEVEL_TYPES.get(lang, ()):      # код вне функций
             code, _ = _cut_at_line_boundary(_text(node, content), settings.max_code_length)
             if code.strip():
@@ -125,9 +167,35 @@ def parse_file(file_path: Path, lang: str) -> list[CodeChunk]:
 
     _walk(root)
 
+    # Add audit_id to symbols
+    if audit_id:
+        for symbol in symbols:
+            symbol["audit_id"] = audit_id
+
+    return chunks, symbols
+
     # Fallback: файл без функций не должен молча исчезать из аудита
     if not chunks:
         code, _ = _cut_at_line_boundary(content, settings.max_code_length)
         _emit(chunks, file_path, code, 1, None)
 
-    return chunks
+    # Add audit_id to symbols and log extraction results
+    if audit_id:
+        for symbol in symbols:
+            symbol["audit_id"] = audit_id
+
+    # Debug logging for symbols collection
+    if symbols:
+        logger.info(f"✓ Extracted {len(symbols)} symbols from {file_path.name}")
+        if len(symbols) <= 3:
+            for i, sym in enumerate(symbols):
+                logger.info(f"  Symbol {i+1}: {sym.get('symbol', 'unknown')} ({sym.get('symbol_type', 'unknown')}) at line {sym.get('start_line', 0)}")
+        else:
+            for i, sym in enumerate(symbols[:3]):
+                logger.info(f"  Symbol {i+1}: {sym.get('symbol', 'unknown')} ({sym.get('symbol_type', 'unknown')}) at line {sym.get('start_line', 0)}")
+            logger.info(f"  ... and {len(symbols) - 3} more symbols")
+    else:
+        logger.info(f"✗ No symbols extracted from {file_path.name}")
+
+    logger.info(f"📊 File parsing: {len(chunks)} chunks, {len(symbols)} symbols")
+    return chunks, symbols

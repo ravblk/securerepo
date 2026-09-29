@@ -19,6 +19,7 @@ from audit.qdrant_service import QdrantService
 from audit.embedding_service import EmbeddingService
 from audit.database_service import DatabaseService
 from audit.kafka_service import KafkaService
+from audit.symbol_context import get_context_enricher
 
 logging.basicConfig(
     level=logging.INFO,
@@ -101,9 +102,10 @@ def initialize_services() -> None:
         audit_workflow = AuditWorkflow(
             llm_service=llm_service,
             qdrant_service=qdrant_service,
-            embedding_service=embedding_service
+            embedding_service=embedding_service,
+            context_enricher=get_context_enricher()
         )
-        logger.info("Audit workflow initialized successfully")
+        logger.info("Audit workflow initialized successfully with Symbol-Context support")
     except Exception as e:
         logger.warning(f"Audit workflow initialization warning: {e}. Workflow may retry on demand.")
 

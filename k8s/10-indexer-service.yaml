@@ -44,8 +44,14 @@ spec:
     spec:
       containers:
       - name: indexer
-        image: xravil/securerepo-indexer-service:v0.0.2-amd64
+        image: xravil/securerepo-indexer-service:v0.0.10-amd64
         imagePullPolicy: IfNotPresent
+        env:
+        - name: POSTGRES_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_URL
         ports:
         - containerPort: 8002
         envFrom:

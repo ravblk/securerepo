@@ -9,6 +9,7 @@ class AuditTask(BaseModel):
     code: str
     file_path: str
     audit_id: str
+    lang: Optional[str] = "python"
     chunk_index: Optional[int] = 0
     total_chunks: Optional[int] = 1
 
@@ -28,14 +29,15 @@ class ServiceInfoResponse(BaseModel):
 
 # LangGraph State
 class AuditState(TypedDict):
-    """State for the LangGraph workflow."""
+    """State for the LangGraph workflow with Symbol-Context support."""
     task: AuditTask
     code: str
     file_path: str
     lang: str
+    audit_id: str  # Required for Symbol-Context
     code_embedding: List[float]
-    general_rules: List[dict]
     internal_rules: List[dict]
+    enriched_context: str  # Symbol-Context enriched function bodies
     violations: List[dict]
     severity: Optional[str]
     auditing_sent: bool

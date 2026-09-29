@@ -44,7 +44,7 @@ spec:
         node: node-app
       containers:
       - name: api
-        image: xravil/securerepo-api-service:v0.0.1-amd64
+        image: xravil/securerepo-api-service:v0.0.2-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000

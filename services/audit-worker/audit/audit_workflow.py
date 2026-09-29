@@ -10,6 +10,7 @@ from .prompts import SYSTEM_PROMPT
 from .llm_service import LLMService
 from .qdrant_service import QdrantService
 from .embedding_service import EmbeddingService
+from .symbol_context import get_context_enricher, SymbolContextEnricher
 from .exceptions import WorkflowError
 from .models import AuditState
 from .langfuse_service import langfuse_service
@@ -26,28 +27,30 @@ class AuditWorkflow:
         self,
         llm_service: LLMService,
         qdrant_service: QdrantService,
-        embedding_service: EmbeddingService
+        embedding_service: EmbeddingService,
+        context_enricher: Optional[SymbolContextEnricher] = None
     ):
         self._llm_service = llm_service
         self._qdrant_service = qdrant_service
         self._embedding_service = embedding_service
+        self._context_enricher = context_enricher or get_context_enricher()
         self._graph = self._build_workflow()
         self._current_trace = None
 
     def _build_workflow(self) -> StateGraph:
-        """Build the LangGraph state graph."""
+        """Build the LangGraph state graph for security audit processing."""
         from .models import AuditState
 
         workflow = StateGraph(AuditState)
         workflow.add_node("compute_embedding", self._compute_embedding)
-        workflow.add_node("retrieve_general", self._retrieve_general_rules)
+        workflow.add_node("enrich_context", self._enrich_with_context)
         workflow.add_node("retrieve_internal", self._retrieve_internal_rules)
         workflow.add_node("analyze", self._analyze_code)
         workflow.add_node("validate", self._ground_and_validate)
 
         workflow.set_entry_point("compute_embedding")
-        workflow.add_edge("compute_embedding", "retrieve_general")
-        workflow.add_edge("retrieve_general", "retrieve_internal")
+        workflow.add_edge("compute_embedding", "enrich_context")
+        workflow.add_edge("enrich_context", "retrieve_internal")
         workflow.add_edge("retrieve_internal", "analyze")
         workflow.add_edge("analyze", "validate")
         workflow.add_edge("validate", END)
@@ -67,23 +70,73 @@ class AuditWorkflow:
             logger.error(f"Error computing embedding: {e}")
             return {"code_embedding": []}
 
-    def _retrieve_general_rules(self, state: dict) -> dict:
-        """Retrieve exactly 7 most relevant internal security rules as zero-shot augmentation context."""
+    def _enrich_with_context(self, state: dict) -> dict:
+        """Enrich code chunk with called function bodies for Symbol-Context analysis."""
+        code = state["code"]
+        audit_id = state.get("audit_id")
+        lang = state.get("lang", "python")
+
+        try:
+            logger.debug(f"Starting Symbol-Context enrichment for audit_id: {audit_id}, lang: {lang}")
+
+            # Use SymbolContextEnricher to add cross-chunk context
+            enriched_context = self._context_enricher.enrich_chunk(
+                code=code,
+                audit_id=audit_id,
+                lang=lang
+            )
+
+            if enriched_context:
+                logger.info(f"✓ Enriched chunk with Symbol-Context ({len(enriched_context)} characters)")
+            else:
+                logger.debug("No Symbol-Context added to chunk (no calls found or symbols not available)")
+
+            # Log to Langfuse
+            if self._current_trace and audit_id:
+                langfuse_service.create_event(
+                    trace_id=self._current_trace.id,
+                    name="symbol_context_enrichment",
+                    metadata={
+                        "context_length": len(enriched_context),
+                        "has_context": bool(enriched_context),
+                        "language": lang
+                    }
+                )
+
+            return {"enriched_context": enriched_context}
+
+        except Exception as e:
+            logger.warning(f"Symbol-Context enrichment failed: {e}. Continuing without context.")
+            # Log failure to Langfuse but continue gracefully
+            if self._current_trace and audit_id:
+                langfuse_service.create_event(
+                    trace_id=self._current_trace.id,
+                    name="symbol_context_enrichment_failed",
+                    metadata={
+                        "error": str(e),
+                        "language": lang
+                    }
+                )
+
+            return {"enriched_context": ""}
+
+    def _retrieve_internal_rules(self, state: dict) -> dict:
+        """Retrieve exactly 3 most relevant internal security rules as zero-shot augmentation context."""
         embedding = state.get("code_embedding", [])
         code = state.get("code", "")
         lang = state.get("lang", "python")
         audit_id = state.get("audit_id")
 
         if not embedding:
-            return {"general_rules": []}
+            return {"internal_rules": []}
 
         try:
-            # Try hybrid search first (recommended method) - retrieves exactly 7 most relevant internal rules
+            # Try hybrid search first (recommended method) - retrieves exactly 3 most relevant internal rules
             rules = self._qdrant_service.search_rules(
                 embedding=embedding,
                 code=code,
                 lang=lang,
-                limit=7  # ТОЛЬКО 7 внутренних правил для zero-shot augmentation
+                limit=3  # ТОЛЬКО 3 внутренних правила для zero-shot augmentation
             )
 
             # Fallback to basic semantic search if hybrid search fails or returns empty results
@@ -92,7 +145,7 @@ class AuditWorkflow:
                 rules = self._qdrant_service.search_basic_rules(
                     embedding=embedding,
                     lang=lang,
-                    limit=7  # ТОЛЬКО 7 внутренних правил
+                    limit=3  # ТОЛЬКО 3 внутренних правила
                 )
 
             logger.info(f"Retrieved {len(rules)} INTERNAL SECURITY RULES as zero-shot augmentation")
@@ -120,7 +173,7 @@ class AuditWorkflow:
                     }
                 )
 
-            return {"general_rules": rules}
+            return {"internal_rules": rules}
         except Exception as e:
             # If hybrid search fails completely, fall back to semantic search
             logger.warning(f"Hybrid search failed: {e}, falling back to semantic search")
@@ -128,7 +181,7 @@ class AuditWorkflow:
                 rules = self._qdrant_service.search_basic_rules(
                     embedding=embedding,
                     lang=lang,
-                    limit=7  # ТОЛЬКО 7 внутренних правил
+                    limit=3  # ТОЛЬКО 3 внутренних правила
                 )
                 logger.info(f"Retrieved {len(rules)} INTERNAL SECURITY RULES via fallback semantic search")
 
@@ -146,7 +199,7 @@ class AuditWorkflow:
                         }
                     )
 
-                return {"general_rules": rules}
+                return {"internal_rules": rules}
             except Exception as fallback_error:
                 logger.error(f"Both hybrid and semantic search failed: {fallback_error}")
 
@@ -162,25 +215,18 @@ class AuditWorkflow:
                         }
                     )
 
-                return {"general_rules": []}
-
-    def _retrieve_internal_rules(self, state: dict) -> dict:
-        """Retrieve internal security policies - now combined with general rules."""
-        # Internal rules are now included in general rules search
-        logger.info("Internal rules retrieval is now integrated with general rules search")
-        return {"internal_rules": []}
+                return {"internal_rules": []}
 
     def _analyze_code(self, state: dict) -> dict:
         """Analyze code using LLM ZERO-SHOT security analysis with internal rules augmentation."""
         code = state["code"]
         file_path = state["file_path"]
         lang = state.get("lang", "python")
-        general_rules = state["general_rules"]
         internal_rules = state["internal_rules"]
         audit_id = state.get("audit_id")
 
-        if not general_rules and not internal_rules:
-            logger.info("No rules found, returning empty violations")
+        if not internal_rules:
+            logger.info("No internal rules found, returning empty violations")
 
             # Log to Langfuse
             if self._current_trace and audit_id:
@@ -189,7 +235,7 @@ class AuditWorkflow:
                     name="analyze_code",
                     metadata={
                         "result": "no_rules",
-                        "reason": "both general and internal rules empty"
+                        "reason": "internal rules empty"
                     }
                 )
 
@@ -201,11 +247,11 @@ class AuditWorkflow:
 
         try:
             # Format internal rules for zero-shot augmentation context
-            if not isinstance(general_rules, (list, tuple)):
-                logger.error(f"general_rules is not a list, type: {type(general_rules)}")
-                general_rules = []
+            if not isinstance(internal_rules, (list, tuple)):
+                logger.error(f"internal_rules is not a list, type: {type(internal_rules)}")
+                internal_rules = []
 
-            for rule in general_rules:
+            for rule in internal_rules:
                 try:
                     # Проверка типа правила с защитой от ошибок
                     if rule is None:
@@ -250,7 +296,7 @@ class AuditWorkflow:
             logger.info(f"Formatted {len(context_rules)} internal rules for ZERO-SHOT augmentation context")
 
         except Exception as e:
-            logger.error(f"Error in context rule formatting: {e}, general_rules type: {type(general_rules)}")
+            logger.error(f"Error in context rule formatting: {e}, internal_rules type: {type(internal_rules)}")
             context_rules = []
 
         # Генерируем текст внутренних правил для zero-shot контекста
@@ -263,8 +309,12 @@ class AuditWorkflow:
                 for i, rule in enumerate(context_rules, 1)
             )
 
+        # Get Symbol-Context enriched function bodies
+        enriched_context = state.get("enriched_context", "")
+
         system_prompt = SYSTEM_PROMPT.format(
             rules=context_rules_text,  # Internal rules as zero-shot augmentation context
+            enriched_context=enriched_context,  # Symbol-Context enriched function bodies
             lang=lang,
             file_path=file_path,
             code=code
