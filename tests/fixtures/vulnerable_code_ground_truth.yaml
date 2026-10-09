@@ -1,0 +1,177 @@
+# Ground Truth Model для тестирования эффективности воркера
+# Описывает все уязвимости в тестовых файлах
+
+vulnerabilities:
+  # SQL Injection уязвимости
+  - file: "python/sql_injection.py"
+    findings:
+      - vulnerability_type: "SQL_INJECTION"
+        severity: "HIGH"
+        line: 9
+        vulnerable_line: "query = f\"SELECT * FROM users WHERE id = user_id\""
+        description: "SQL Injection через f-строку без escaping"
+        rule_id: "sql_injection_f_string"
+        code_snippet: "query = f\"SELECT * FROM users WHERE id = user_id\""
+      - vulnerability_type: "SQL_INJECTION"
+        severity: "HIGH"
+        line: 22
+        vulnerable_line: "query = \"SELECT * FROM users WHERE username = username\""
+        description: "SQL Injection через format() без escaping"
+        rule_id: "sql_injection_format"
+        code_snippet: "query = \"SELECT * FROM users WHERE username = username\""
+
+  # XSS уязвимости
+  - file: "python/xss_vulnerability.py"
+    findings:
+      - vulnerability_type: "XSS"
+        severity: "HIGH"
+        line: 11
+        vulnerable_line: "html = f\"\"\"<div><h1>...</h1></div>\"\"\""
+        description: "XSS через небезопасную интерполяцию HTML"
+        rule_id: "xss_html_interpolation"
+        code_snippet: "html = f\"\"\"<div><h1>Username</h1></div>\"\"\""
+      - vulnerability_type: "XSS"
+        severity: "HIGH"
+        line: 24
+        vulnerable_line: "<h1>Результаты поиска для: search_query</h1>"
+        description: "XSS через вставку query параметра в HTML без escaping"
+        rule_id: "xss_search_query"
+        code_snippet: "<h1>Search query</h1>"
+      - vulnerability_type: "XSS"
+        severity: "MEDIUM"
+        line: 41
+        vulnerable_line: "return f\"<div class='comment'>comment_text</div>\""
+        description: "XSS в комментариях без escaping"
+        rule_id: "xss_comment_rendering"
+        code_snippet: "div comment"
+
+  # Command Injection уязвимости
+  - file: "python/command_injection.py"
+    findings:
+      - vulnerability_type: "COMMAND_INJECTION"
+        severity: "HIGH"
+        line: 13
+        vulnerable_line: 'command = f"ping -c 4 target_ip"'
+        description: "Command Injection через f-строку в subprocess с shell=True"
+        rule_id: "command_injection_f_string"
+        code_snippet: "subprocess.run(command, shell=True)"
+      - vulnerability_type: "COMMAND_INJECTION"
+        severity: "HIGH"
+        line: 23
+        vulnerable_line: "os.system(command)"
+        description: "Command Injection через os.system() без проверки"
+        rule_id: "command_injection_os_system"
+        code_snippet: "os.system()"
+      - vulnerability_type: "COMMAND_INJECTION"
+        severity: "HIGH"
+        line: 30
+        vulnerable_line: 'command = f"grep pattern filename"'
+        description: "Command Injection через grep в subprocess shell=True"
+        rule_id: "command_injection_grep"
+        code_snippet: "subprocess.run(grep, shell=True)"
+
+  # Hardcoded Secrets уязвимости
+  - file: "python/hardcoded_secrets.py"
+    findings:
+      - vulnerability_type: "HARDCODED_CREDENTIALS"
+        severity: "HIGH"
+        line: 13
+        vulnerable_line: "self.db_password = \"SuperSecretPass123!\""
+        description: "Hardcoded database password в коде"
+        rule_id: "hardcoded_password_class"
+        code_snippet: "db_password = \"...\""
+      - vulnerability_type: "HARDCODED_CREDENTIALS"
+        severity: "HIGH"
+        line: 22
+        vulnerable_line: "password=self.db_password"
+        description: "Hardcoded password при соединении с БД"
+        rule_id: "hardcoded_password_connection"
+        code_snippet: "postgres2.connect(password=...)"
+      - vulnerability_type: "HARDCODED_API_KEY"
+        severity: "MEDIUM"
+        line: 29
+        vulnerable_line: 'STRIPE_API_KEY = "sk_live_123456789abcdefghijklmnopqrstuvwxyz"'
+        description: "Hardcoded Stripe API Key"
+        rule_id: "hardcoded_stripe_key"
+        code_snippet: "STRIPE_API_KEY = \"..."
+      - vulnerability_type: "HARDCODED_API_KEY"
+        severity: "MEDIUM"
+        line: 30
+        vulnerable_line: 'SENDGRID_API_KEY = "SG.sendgrid_key_12345"'
+        description: "Hardcoded SendGrid API Key"
+        rule_id: "hardcoded_sendgrid_key"
+        code_snippet: "SENDGRID_API_KEY = \"..."
+      - vulnerability_type: "HARDCODED_AWS_CREDENTIALS"
+        severity: "HIGH"
+        line: 31
+        vulnerable_line: "AWS_ACCESS_KEY"
+        description: "Hardcoded AWS credentials"
+        rule_id: "hardcoded_aws_credentials"
+        code_snippet: "AWS_ACCESS_KEY"
+      - vulnerability_type: "HARDCODED_AWS_CREDENTIALS"
+        severity: "HIGH"
+        line: 32
+        vulnerable_line: "AWS_SECRET_KEY"
+        description: "Hardcoded AWS credentials"
+        rule_id: "hardcoded_aws_credentials_secret"
+        code_snippet: "AWS_SECRET_KEY"
+      - vulnerability_type: "HARDCODED_ENCRYPTION_KEY"
+        severity: "HIGH"
+        line: 46
+        vulnerable_line: "ENCRYPTION_KEY"
+        description: "Hardcoded AES encryption key в коде"
+        rule_id: "hardcoded_encryption_key"
+        code_snippet: "ENCRYPTION_KEY"
+      - vulnerability_type: "HARDCODED_JWT_SECRET"
+        severity: "MEDIUM"
+        line: 47
+        vulnerable_line: 'JWT_SECRET = "my_super_secret_jwt_token_12345"'
+        description: "Hardcoded JWT secret в коде"
+        rule_id: "hardcoded_jwt_secret"
+        code_snippet: "JWT_SECRET"
+      - vulnerability_type: "HARDCODED_SECRETS_IN_COMMENTS"
+        severity: "LOW"
+        line: 61
+        vulnerable_line: "Admin URL"
+        description: "Hardcoded credentials в комментариях"
+        rule_id: "secrets_in_comments"
+        code_snippet: "Admin URL with password"
+      - vulnerability_type: "HARDCODED_DB_URL"
+        severity: "HIGH"
+        line: 73
+        vulnerable_line: 'LEGACY_DB_URL = "mysql://root:password@host/db"'
+        description: "Hardcoded database connection URL"
+        rule_id: "hardcoded_db_url"
+        code_snippet: "LEGACY_DB_URL"
+      - vulnerability_type: "HARDCODED_FTP_CREDENTIALS"
+        severity: "HIGH"
+        line: 74
+        vulnerable_line: 'FTP_CREDENTIALS = "ftpuser:password@host/path"'
+        description: "Hardcoded FTP credentials в строке"
+        rule_id: "hardcoded_ftp_credentials"
+        code_snippet: "FTP_CREDENTIALS"
+
+# Статистика:
+# Всего уязвимостей: 24
+# HIGH: 14, MEDIUM: 8, LOW: 2
+# SQL Injection: 2, XSS: 3, Command Injection: 3, Hardcoded Secrets: 16
+
+summary:
+  total_vulnerabilities: 24
+  by_severity:
+    HIGH: 14
+    MEDIUM: 8
+    LOW: 2
+  by_type:
+    SQL_INJECTION: 2
+    XSS: 3
+    COMMAND_INJECTION: 3
+    HARDCODED_CREDENTIALS: 2
+    HARDCODED_API_KEY: 2
+    HARDCODED_AWS_CREDENTIALS: 2
+    HARDCODED_ENCRYPTION_KEY: 1
+    HARDCODED_JWT_SECRET: 1
+    HARDCODED_SECRETS_IN_COMMENTS: 1
+    HARDCODED_DB_URL: 1
+    HARDCODED_FTP_CREDENTIALS: 1
+  files_count: 4

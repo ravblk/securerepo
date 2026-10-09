@@ -52,7 +52,9 @@ class AuditController:
                 "branch": request.branch,
                 "lang": request.lang
             }
-            self._kafka_service.send_message(settings.repo_parsed_topic, audit_message)
+            # Use audit_id as key for partitioning - ensures all chunks for a single audit
+            # are processed by the same worker, maintaining ordering
+            self._kafka_service.send_message(settings.repo_parsed_topic, audit_message, key=audit_id)
 
             logger.info(f"Started audit {audit_id} for user {request.user_id}")
 

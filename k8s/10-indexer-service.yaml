@@ -44,7 +44,7 @@ spec:
     spec:
       containers:
       - name: indexer
-        image: xravil/securerepo-indexer-service:v0.0.10-amd64
+        image: xravil/securerepo-indexer-service:v0.1.0
         imagePullPolicy: IfNotPresent
         env:
         - name: POSTGRES_URL

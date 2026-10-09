@@ -1,0 +1,30 @@
+---
+# Frontend Service (LoadBalancer для внешнего доступа)
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-lb
+  namespace: securerepo
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3000        # Порт, на котором будет доступен Frontend на localhost
+    targetPort: 3000  # Порт внутри контейнера Frontend
+    name: http
+  selector:
+    app: frontend     # Убедитесь, что лейблы совпадают с лейблами в Deployment вашего Frontend
+
+# Keycloak Service (LoadBalancer для внешнего доступа)
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-lb
+  namespace: securerepo
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8180
+    targetPort: 8080
+    name: http
+  selector:
+    app: keycloak

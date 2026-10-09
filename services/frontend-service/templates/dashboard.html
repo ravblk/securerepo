@@ -762,7 +762,7 @@
                 <span>Live</span>
             </div>
             <span class="user" id="userInfo">Загрузка...</span>
-            <a href="/login" class="logout">Выйти</a>
+            <a href="/login" class="logout" onclick="clearSession()">Выйти</a>
         </div>
     </div>
 
@@ -821,6 +821,98 @@
             return localStorage.getItem('access_token');
         }
 
+        function clearSession() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('access_token_expires_at');
+        }
+
+        function decodeTokenPayload(token) {
+            const payload = token.split('.')[1];
+            const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+            const padding = (4 - base64.length % 4) % 4;
+            return JSON.parse(atob(base64 + '='.repeat(padding)));
+        }
+
+        function tokenExpiresSoon() {
+            const token = getToken();
+            if (!token) return true;
+            const storedExpiry = Number(localStorage.getItem('access_token_expires_at') || 0);
+            if (storedExpiry) return storedExpiry <= Date.now() + 30000;
+            try {
+                const payload = decodeTokenPayload(token);
+                if (!payload.exp) return false;
+                return payload.exp * 1000 <= Date.now() + 30000;
+            } catch (e) {
+                return true;
+            }
+        }
+
+        let refreshInFlight = null;
+        let sessionRedirecting = false;
+
+        function redirectToLogin() {
+            if (sessionRedirecting) return;
+            sessionRedirecting = true;
+            clearSession();
+            window.location.href = '/login';
+        }
+
+        function refreshAccessToken() {
+            if (!refreshInFlight) {
+                refreshInFlight = (async () => {
+                    const refreshToken = localStorage.getItem('refresh_token');
+                    if (!refreshToken) return false;
+                    const response = await fetch('/auth/refresh', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refresh_token: refreshToken })
+                    });
+                    if (!response.ok) return false;
+                    const data = await response.json();
+                    if (!data.access_token) return false;
+                    localStorage.setItem('access_token', data.access_token);
+                    if (data.refresh_token) {
+                        localStorage.setItem('refresh_token', data.refresh_token);
+                    }
+                    if (data.expires_in) {
+                        localStorage.setItem(
+                            'access_token_expires_at',
+                            String(Date.now() + data.expires_in * 1000)
+                        );
+                    }
+                    return true;
+                })().finally(() => {
+                    refreshInFlight = null;
+                });
+            }
+            return refreshInFlight;
+        }
+
+        async function authFetch(url, options = {}) {
+            if (tokenExpiresSoon()) {
+                const refreshed = await refreshAccessToken();
+                if (!refreshed) {
+                    redirectToLogin();
+                    throw new Error('Session expired');
+                }
+            }
+
+            const headers = new Headers(options.headers || {});
+            headers.set('Authorization', `Bearer ${getToken()}`);
+            let response = await fetch(url, Object.assign({}, options, { headers }));
+            if (response.status === 401) {
+                const refreshed = await refreshAccessToken();
+                if (!refreshed) {
+                    redirectToLogin();
+                    throw new Error('Session expired');
+                }
+                headers.set('Authorization', `Bearer ${getToken()}`);
+                response = await fetch(url, Object.assign({}, options, { headers }));
+            }
+            return response;
+        }
+
         function getUserInfo() {
             const token = getToken();
             console.log('getUserInfo called, token exists:', !!token);
@@ -877,40 +969,191 @@
         let isLoadingAudits = false;
         let lastAuditData = null;
 
-        async function loadAudits() {
-            if (isLoadingAudits) return; // Skip if already loading
-            isLoadingAudits = true;
-
-            const token = getToken();
-            if (!token) {
-                window.location.href = '/login';
-                isLoadingAudits = false;
-                return;
+        // SSE-based audit status manager
+        class AuditStatusManager {
+            constructor() {
+                this.activeConnections = new Map(); // audit_id -> EventSource
+                this.pollingInterval = 5000; // 5 seconds (reduced from 1 second)
+                this.token = null;
             }
 
-            try {
-                const response = await fetch('/api/audits', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const data = await response.json();
+            async loadAudits() {
+                if (isLoadingAudits) return; // Skip if already loading
+                isLoadingAudits = true;
 
-                // Check if data actually changed
-                const dataStr = JSON.stringify(data);
-                if (lastAuditData === dataStr) {
-                    isLoadingAudits = false;
-                    return; // Skip update if no changes
-                }
-                lastAuditData = dataStr;
-
-                const list = document.getElementById('auditList');
-                if (!data.items || data.items.length === 0) {
-                    list.innerHTML = '<p>Нет аудитов. Создайте первый аудит 🎯</p>';
+                if (!getToken() && !localStorage.getItem('refresh_token')) {
+                    redirectToLogin();
                     isLoadingAudits = false;
                     return;
                 }
 
+                try {
+                    const response = await authFetch('/api/audits');
+                    this.token = getToken();
+                    const data = await response.json();
+
+                    // Check if data actually changed
+                    const dataStr = JSON.stringify(data);
+                    if (lastAuditData === dataStr) {
+                        isLoadingAudits = false;
+                        return; // Skip update if no changes
+                    }
+                    lastAuditData = dataStr;
+
+                    this.renderAuditList(data);
+                    this.manageSSEConnections(data);
+                } catch (e) {
+                    if (e.message === 'Session expired') return;
+                    console.error(e);
+                    document.getElementById('auditList').innerHTML = '<p>❌ Ошибка загрузки аудитов</p>';
+                } finally {
+                    isLoadingAudits = false;
+                }
+            }
+
+            manageSSEConnections(data) {
+                const currentAuditIds = new Set();
+
+                // Find active audits (pending, running, processing)
+                const activeAudits = (data.items || []).filter(audit =>
+                    ['pending', 'running', 'processing'].includes(audit.status)
+                );
+
+                for (const audit of activeAudits) {
+                    currentAuditIds.add(audit.audit_id);
+
+                    // Create SSE connection if not already connected
+                    if (!this.activeConnections.has(audit.audit_id)) {
+                        this.connectSSE(audit.audit_id);
+                    }
+                }
+
+                // Cleanup connections for completed/error audits
+                for (const [auditId, eventSource] of this.activeConnections) {
+                    if (!currentAuditIds.has(auditId)) {
+                        this.disconnectSSE(auditId);
+                    }
+                }
+            }
+
+            connectSSE(auditId, retryCount = 0) {
+                try {
+                    const eventSource = new EventSource(`/api/audit/${auditId}/live-status`);
+
+                    eventSource.addEventListener('connected', (event) => {
+                        console.log(`[SSE] Connected to audit ${auditId}`);
+                        this.addLiveIndicator(auditId);
+                        retryCount = 0; // Reset retry counter on successful connection
+                    });
+
+                    eventSource.addEventListener('status_update', (event) => {
+                        const data = JSON.parse(event.data);
+                        console.log(`[SSE] Status update for audit ${auditId}:`, data);
+
+                        // Update audit item in DOM
+                        this.updateAuditStatus(auditId, data.status);
+
+                        // Disconnect if audit finalized
+                        if (['completed', 'failed', 'all_completed'].includes(data.status)) {
+                            this.disconnectSSE(auditId);
+                            // Trigger full refresh to get new audit list
+                            this.loadAudits();
+                        }
+                    });
+
+                    eventSource.addEventListener('heartbeat', (event) => {
+                        // Optional: log heartbeats for debugging
+                        // console.log(`[SSE] Heartbeat for audit ${auditId}`);
+                    });
+
+                    eventSource.addEventListener('complete', (event) => {
+                        console.log(`[SSE] Audit ${auditId} completed via SSE`);
+                        this.disconnectSSE(auditId);
+                        this.loadAudits();
+                    });
+
+                    eventSource.onerror = (error) => {
+                        console.error(`[SSE] Error for audit ${auditId}:`, error);
+
+                        // Exponential backoff reconnection
+                        if (retryCount < 5) { // Max 5 retries
+                            const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Max 30s
+                            console.log(`[SSE] Reconnecting to ${auditId} in ${delay}ms (attempt ${retryCount + 1}/5)`);
+
+                            setTimeout(() => {
+                                this.connectSSE(auditId, retryCount + 1);
+                            }, delay);
+                        } else {
+                            console.error(`[SSE] Max retries reached for audit ${auditId}, giving up`);
+                            this.disconnectSSE(auditId);
+
+                            // Fallback to polling
+                            setTimeout(() => {
+                                this.loadAudits();
+                            }, 1000);
+                        }
+                    };
+
+                    this.activeConnections.set(auditId, eventSource);
+
+                } catch (error) {
+                    console.error(`[SSE] Failed to connect to audit ${auditId}:`, error);
+                }
+            }
+
+            disconnectSSE(auditId) {
+                const eventSource = this.activeConnections.get(auditId);
+                if (eventSource) {
+                    eventSource.close();
+                    this.activeConnections.delete(auditId);
+                    this.removeLiveIndicator(auditId);
+                    console.log(`[SSE] Disconnected from audit ${auditId}`);
+                }
+            }
+
+            addLiveIndicator(auditId) {
+                const statusElement = document.querySelector(`[data-audit-id="${auditId}"] .status`);
+                if (statusElement && !statusElement.querySelector('.live-indicator')) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'live-indicator';
+                    indicator.innerHTML = '<span class="live-dot"></span>';
+                    statusElement.appendChild(indicator);
+                }
+            }
+
+            removeLiveIndicator(auditId) {
+                const indicator = document.querySelector(`[data-audit-id="${auditId}"] .live-indicator`);
+                if (indicator) {
+                    indicator.remove();
+                }
+            }
+
+            updateAuditStatus(auditId, status) {
+                const statusElement = document.querySelector(`[data-audit-id="${auditId}"] .status`);
+                if (statusElement) {
+                    statusElement.className = `status status-${status}`;
+                    statusElement.textContent = status;
+
+                    // Make clickable if completed
+                    const auditItem = document.querySelector(`[data-audit-id="${auditId}"]`);
+                    if (status === 'completed') {
+                        auditItem.classList.add('clickable');
+                        auditItem.onclick = () => viewAudit(auditId);
+                    }
+                }
+            }
+
+            renderAuditList(data) {
+                const list = document.getElementById('auditList');
+                if (!data.items || data.items.length === 0) {
+                    list.innerHTML = '<p>Нет аудитов. Создайте первый аудит 🎯</p>';
+                    return;
+                }
+
                 list.innerHTML = data.items.map(audit => `
-                    <div class="audit-item ${audit.status === 'completed' ? 'clickable' : ''}" ${audit.status === 'completed' ? `onclick="viewAudit('${audit.audit_id}')"` : ''}>
+                    <div class="audit-item ${audit.status === 'completed' ? 'clickable' : ''}"
+                         data-audit-id="${audit.audit_id}"
+                         ${audit.status === 'completed' ? `onclick="viewAudit('${audit.audit_id}')"` : ''}>
                         <div class="info">
                             <h3>📂 ${audit.repo_url}</h3>
                             <p>📅 ${new Date(audit.created_at).toLocaleString()}</p>
@@ -920,16 +1163,33 @@
                         </span>
                     </div>
                 `).join('');
-            } catch (e) {
-                console.error(e);
-                document.getElementById('auditList').innerHTML = '<p>❌ Ошибка загрузки аудитов</p>';
-            } finally {
-                isLoadingAudits = false;
+            }
+
+            start() {
+                this.token = getToken();
+                this.loadAudits();
+
+                // Reduced polling interval from 1s to 5s
+                this.interval = setInterval(() => {
+                    this.loadAudits();
+                }, this.pollingInterval);
+            }
+
+            stop() {
+                clearInterval(this.interval);
+
+                // Close all SSE connections
+                for (const [auditId, eventSource] of this.activeConnections) {
+                    eventSource.close();
+                }
+                this.activeConnections.clear();
+            }
+
+            // Expose loadAudits for external use
+            load() {
+                this.loadAudits();
             }
         }
-
-        // Auto-refresh audits every second
-        setInterval(loadAudits, 1000);
 
         function openNewAuditModal() {
             document.getElementById('newAuditModal').classList.add('active');
@@ -944,17 +1204,15 @@
         document.getElementById('auditForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const formData = new FormData(e.target);
-            const token = getToken();
-
-            if (!token) {
-                window.location.href = '/login';
+            if (!getToken() && !localStorage.getItem('refresh_token')) {
+                redirectToLogin();
                 return;
             }
 
             try {
-                const response = await fetch('/api/audits/start', {
+                const response = await authFetch('/api/audits/start', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         repo_url: formData.get('repo_url'),
                         branch: formData.get('branch'),
@@ -965,11 +1223,12 @@
                 const data = await response.json();
                 if (response.ok) {
                     closeModal();
-                    loadAudits();
+                    auditManager.load();
                 } else {
                     alert('❌ Ошибка: ' + (data.detail || 'Неизвестная ошибка'));
                 }
             } catch (e) {
+                if (e.message === 'Session expired') return;
                 alert('❌ Ошибка запуска аудита');
             }
         });
@@ -1013,9 +1272,8 @@
         }
 
         async function viewAudit(auditId) {
-            const token = getToken();
-            if (!token) {
-                window.location.href = '/login';
+            if (!getToken() && !localStorage.getItem('refresh_token')) {
+                redirectToLogin();
                 return;
             }
 
@@ -1026,9 +1284,7 @@
 
                 reportModal.classList.add('active');
 
-                const statusResponse = await fetch(`/api/audits/${auditId}/status`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                const statusResponse = await authFetch(`/api/audits/${auditId}/status`);
 
                 if (!statusResponse.ok) {
                     throw new Error(`Ошибка получения статуса: ${statusResponse.status}`);
@@ -1065,9 +1321,7 @@
                     return;
                 }
 
-                const reportResponse = await fetch(`/api/audits/${auditId}/report`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                const reportResponse = await authFetch(`/api/audits/${auditId}/report`);
 
                 if (!reportResponse.ok) {
                     throw new Error(`Ошибка получения отчёта: ${reportResponse.status}`);
@@ -1078,6 +1332,7 @@
                 showAuditReport(auditId, statusData, reportData);
 
             } catch (e) {
+                if (e.message === 'Session expired') return;
                 console.error('Error loading audit report:', e);
                 const reportModal = document.getElementById('reportModal');
                 const reportContent = document.getElementById('reportContent');
@@ -1298,7 +1553,10 @@
             console.log('User authorized:', user.sub);
             currentUser = user;
             document.getElementById('userInfo').textContent = user.sub;
-            loadAudits();
+
+            // Initialize SSE-based audit manager
+            auditManager = new AuditStatusManager();
+            auditManager.start();
         }
     </script>
 </body>

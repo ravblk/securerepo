@@ -26,8 +26,16 @@
                         console.log('Access token present:', !!data.access_token);
                         console.log('Access token length:', data.access_token ? data.access_token.length : 0);
 
-                        // Store token
                         localStorage.setItem('access_token', data.access_token);
+                        if (data.refresh_token) {
+                            localStorage.setItem('refresh_token', data.refresh_token);
+                        }
+                        if (data.expires_in) {
+                            localStorage.setItem(
+                                'access_token_expires_at',
+                                String(Date.now() + data.expires_in * 1000)
+                            );
+                        }
 
                         // Debug: Verify storage worked
                         const storedToken = localStorage.getItem('access_token');

@@ -60,6 +60,12 @@ class KafkaService:
             logger.exception("Failed to send status for audit %s: %s", audit_id, e)
 
     def send_audit_tasks(self, audit_id: str, points: list, lang: str = "python") -> None:
+        """Send audit tasks to Kafka for processing.
+
+        Uses audit_id as message key to ensure all chunks for a single audit are
+        delivered to the same partition, maintaining ordering and allowing
+        parallel processing of different audits across multiple worker replicas.
+        """
         if not self._producer:
             logger.warning("Producer not initialized, cannot send audit tasks for audit %s", audit_id)
             return
@@ -75,7 +81,14 @@ class KafkaService:
                 "total_chunks": total,
             }
             try:
-                self._producer.send(settings.audit_tasks_topic, value=task)
+                # Use audit_id as key for partitioning - ensures all chunks for a single audit
+                # are processed by the same worker in order, while different audits can be
+                # processed in parallel across multiple worker replicas
+                self._producer.send(
+                    settings.audit_tasks_topic,
+                    value=task,
+                    key=audit_id.encode("utf-8")
+                )
             except Exception as e:
                 logger.exception("Failed to send audit task %d for audit %s: %s", i, audit_id, e)
         try:

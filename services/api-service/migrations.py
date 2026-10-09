@@ -5,14 +5,14 @@ Handles properly versioned database schema migrations with foreign key relations
 
 import os
 from datetime import datetime
-import psycopg2
-from psycopg2 import sql
+import psycopg
+from psycopg import sql
 
 POSTGRES_URL = os.getenv("POSTGRES_URL", "postgresql://securerepo:securerepo_pass@postgres:5432/securerepo")
 
 def get_db_connection():
     """Функция для создания подключения к PostgreSQL."""
-    return psycopg2.connect(POSTGRES_URL)
+    return psycopg.connect(POSTGRES_URL)
 
 def create_schema_migrations_table():
     """

@@ -144,10 +144,9 @@ def list_audits(
 def get_audit_results(audit_id: str) -> List[Tuple]:
     """Get all audit results for a given audit ID."""
     try:
-        import psycopg2
-        from psycopg2.extras import Json
+        import psycopg
 
-        conn = psycopg2.connect(settings.postgres_url)
+        conn = psycopg.connect(settings.postgres_url)
         cursor = conn.cursor()
 
         cursor.execute(

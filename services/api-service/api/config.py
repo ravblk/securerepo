@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,11 @@ class Settings:
     # Database Configuration
     postgres_url: str = os.getenv("POSTGRES_URL", "postgresql://securerepo:securerepo_pass@postgres:5432/securerepo")
 
+    # Keycloak Configuration
+    keycloak_url: str = os.getenv("KEYCLOAK_URL", "http://keycloak:8080")
+    keycloak_realm: str = os.getenv("KEYCLOAK_REALM", "securerepo")
+    keycloak_audience: Optional[str] = os.getenv("KEYCLOAK_CLIENT_ID", "securerepo-api") or None
+
     # Application Configuration
     app_name: str = "SecureRepo API"
     app_version: str = "1.0.0"
@@ -26,6 +31,13 @@ class Settings:
     # Timeout Configuration
     kafka_timeout_seconds: int = 30
     db_connection_timeout_seconds: int = 10
+
+    # SSE Configuration
+    sse_enabled: bool = os.getenv("SSE_ENABLED", "true").lower() == "true"
+    sse_heartbeat_interval: int = int(os.getenv("SSE_HEARTBEAT_INTERVAL", "15"))
+    sse_cleanup_interval: int = int(os.getenv("SSE_CLEANUP_INTERVAL", "300"))
+    sse_max_subscribers: int = int(os.getenv("SSE_MAX_SUBSCRIBERS", "100"))
+    sse_max_subscribers_per_audit: int = int(os.getenv("SSE_MAX_SUBSCRIBERS_PER_AUDIT", "10"))
 
     # API Configuration
     api_host: str = "0.0.0.0"

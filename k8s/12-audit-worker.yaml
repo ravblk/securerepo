@@ -9,7 +9,8 @@ data:
   KAFKA_BROKER: "kafka:9092"
   QDRANT_URL: "http://qdrant:6333"
   EMBEDDING_URL: "http://embedding:8080/embed"
-  LLM_MODEL: "qwen2.5-coder-7b-instruct-abliterated:q4_k_m"
+  # LLM_MODEL: "qwen2.5-coder-7b-instruct-abliterated:q4_k_m"
+  LLM_MODEL: "Qwen/Qwen3-Coder-Next"
   HTTP_TIMEOUT: "240"
   EMBEDDING_TIMEOUT: "240"
   # Guardrails Configuration - Only run essential checks
@@ -33,11 +34,11 @@ spec:
       labels:
         app: audit-worker
     spec:
-      nodeSelector:
-        node: node-audit
+      # nodeSelector:
+      #   node: node-audit
       containers:
       - name: audit-worker
-        image: xravil/securerepo-audit-worker:v0.0.24-amd64
+        image: xravil/securerepo-audit-worker:v0.1.0
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:

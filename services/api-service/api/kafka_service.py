@@ -34,8 +34,8 @@ class KafkaService:
             )
 
             topics = [
-                NewTopic(name=settings.repo_parsed_topic, num_partitions=1, replication_factor=1),
-                NewTopic(name=settings.audit_tasks_topic, num_partitions=1, replication_factor=1),
+                NewTopic(name=settings.repo_parsed_topic, num_partitions=5, replication_factor=1),
+                NewTopic(name=settings.audit_tasks_topic, num_partitions=5, replication_factor=1),
                 NewTopic(name=settings.audit_status_topic, num_partitions=1, replication_factor=1)
             ]
 
@@ -71,13 +71,27 @@ class KafkaService:
 
         return self._producer
 
-    def send_message(self, topic: str, message: dict) -> None:
-        """Send a message to a Kafka topic."""
+    def send_message(self, topic: str, message: dict, key: Optional[str] = None) -> None:
+        """Send a message to a Kafka topic.
+
+        Args:
+            topic: Kafka topic name
+            message: Message payload (will be JSON serialized)
+            key: Optional message key for partitioning. Messages with the same
+                key are guaranteed to be delivered to the same partition in order.
+                This is critical for maintaining ordering within a single audit.
+                For example, pass audit_id to ensure all chunks for a given audit
+                are processed by the same worker in order.
+        """
         try:
             producer = self._get_producer()
-            producer.send(topic, value=message)
+            producer.send(
+                topic,
+                value=message,
+                key=key.encode("utf-8") if key else None
+            )
             producer.flush(timeout=settings.kafka_timeout_seconds)
-            logger.info(f"Sent message to topic {topic}")
+            logger.info(f"Sent message to topic {topic}" + (f" with key={key}" if key else ""))
         except Exception as e:
             logger.error(f"Failed to send message to Kafka topic {topic}: {e}")
             raise IntegrationError(f"Failed to send message to Kafka: {str(e)}")

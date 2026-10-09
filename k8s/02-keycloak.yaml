@@ -107,17 +107,3 @@ spec:
   selector:
     app: keycloak
     
-# Keycloak Service (LoadBalancer для внешнего доступа)
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: keycloak-lb
-#   namespace: securerepo
-# spec:
-#   type: LoadBalancer
-#   ports:
-#   - port: 8180
-#     targetPort: 8080
-#     name: http
-#   selector:
-#     app: keycloak
