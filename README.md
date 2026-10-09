@@ -15,13 +15,13 @@ SecureRepo Batch Auditor — корпоративная система масс�
 
 ### Развертывание
 - [Руководство по развертыванию в Kubernetes](docs/k8s-deployment-guide.md)
--Конфигурация секретов в Kubernetes](k8s/secrets-example/)
+- [Конфигурация секретов в Kubernetes](k8s/secrets-example/)
 
 ### Архитектура и дизайн
-- [Архитектура системы](docs/architecture/ARCHITECTURE.md)
-- [Deployment Diagram](docs/architecture/DEPLOYMENT_DIAGRAM.md)
-- [API Documentation](docs/architecture/API.md)
-- [Kafka Topics](docs/architecture/KAFKA_TOPICS.md)
+- [Архитектура системы](docs/architecture/architecture.md)
+- [Deployment Diagram](docs/deployment-diagram.md)
+- [API Documentation](services/api-service/openapi.yaml)
+- [Kafka Topics](docs/architecture/kafka-topics.md)
 
 ### Развитие и тестирование
 - [Требования к ресурсам](docs/RESOURCES.md)

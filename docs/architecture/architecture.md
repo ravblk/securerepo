@@ -26,7 +26,9 @@
 | `repo.parsed` | API → Indexer | URL репозитория |
 | `audit.tasks` | Indexer → Workers | Задачи аудита |
 | `audit.status` | Workers → API | Статусы аудитов |
-| `audit.dlq` | Workers | Dead Letter Queue |
+| `audit.dlq` | — | Задел, сервисы топик не используют |
+
+Формат сообщений, партиции и consumer group: [Kafka-топики](kafka-topics.md).
 
 ### 2.3 PostgreSQL — Реляционные данные
 
