@@ -38,7 +38,7 @@ spec:
       #   node: node-audit
       containers:
       - name: audit-worker
-        image: xravil/securerepo-audit-worker:v0.1.0
+        image: xravil/securerepo-audit-worker:v0.2.1-linux-amd64
         imagePullPolicy: IfNotPresent
         envFrom:
         - configMapRef:
@@ -63,12 +63,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: langfuse-secrets
-              key: SECUREREPO_SECRET_KEY  # Swapped: secret has pk- value
+              key: SECUREREPO_PUBLIC_KEY
         - name: LANGFUSE_SECRET_KEY
           valueFrom:
             secretKeyRef:
               name: langfuse-secrets
-              key: SECUREREPO_PUBLIC_KEY  # Swapped: secret has sk- value
+              key: SECUREREPO_SECRET_KEY
         - name: LANGFUSE_HOST
           value: "http://langfuse:3090"
         resources:

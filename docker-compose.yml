@@ -165,28 +165,6 @@ services:
       - qdrant
       - embedding
 
-  # OWASP Seeder
-  owasp-seeder:
-    build: ./services/owasp-seeder
-    container_name: securerepo-owasp-seeder
-    ports:
-      - "8004:8004"
-    env_file:
-      - ./services/owasp-seeder/.env
-    environment:
-      - QDRANT_URL=http://qdrant:6333
-      - EMBEDDING_URL=http://embedding:8080
-      - ENABLE_NESTED_SCANNING=true
-      - MAX_DEPTH=2
-      - MAX_PAGES_PER_DOMAIN=50
-      - FOLLOW_EXTERNAL_LINKS=true
-      - HTTP_TIMEOUT=180
-    networks:
-      - securerepo
-    depends_on:
-      - qdrant
-      - embedding
-
   # Indexer Service
   indexer:
     build: ./services/indexer-service

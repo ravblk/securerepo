@@ -10,10 +10,6 @@ workspace {
             tags "external"
         }
 
-        owasp = softwareSystem "OWASP" "База знаний уязвимостей" {
-            tags "external"
-        }
-
         keycloak = softwareSystem "Keycloak" "Система идентификации и авторизации (OAuth2/OIDC)" {
             tags "external"
         }
@@ -23,7 +19,6 @@ workspace {
             // ===== Knowledge & Data Layer =====
             qdrant = container "Qdrant" "Векторная БД для RAG" {
                 internalPolicies = component "internal_policies" "Корпоративные политики (Internal Rules)"
-                generalPractices = component "general_best_practices" "OWASP/CWE база знаний"
                 codeRepo = component "code_repo" "AST-чанки кода репозитория"
             }
 
@@ -42,11 +37,6 @@ workspace {
             }
 
             // ===== Application Layer =====
-            owaspSeeder = container "OWASP Seeder" "Seed OWASP/CWE базы знаний" {
-                seedScript = component "Seed Script" "Загрузка правил в Qdrant"
-                htmlParser = component "HTML Parser" "Извлечение текста из OWASP"
-            }
-
             internalRulesIngestion = container "Internal Rules Ingestion" "Синхронизация политик из Internal Rules" {
                 rulesClient = component "Rules Client" "Загрузка правил"
                 htmlParser = component "HTML Parser" "Извлечение текста из страниц"
@@ -79,11 +69,10 @@ workspace {
 
             auditWorker = container "Audit Worker" "Обработка задач аудита" {
                 kafkaConsumer = component "Kafka Consumer" "Чтение из audit.tasks"
-                langGraph = component "LangGraph Engine" "DAG из 3 узлов"
+                langGraph = component "LangGraph Engine" "DAG: embedding → context → internal RAG → LLM → validate"
                 dlqProducer = component "DLQ Producer" "Отправка в audit.dlq"
-                generalRetriever = component "General Retriever" "Поиск в OWASP (Qdrant)"
-                internalRetriever = component "Internal Retriever" "Поиск в корпоративных политиках"
-                analyzer = component "Analyzer" "LLM: сравнение кода с правилами"
+                internalRetriever = component "Internal Retriever" "Top-K по internal_policies (контекст для LLM)"
+                analyzer = component "Analyzer" "LLM: zero-shot аудит с augmentation из internal rules"
                 formatter = component "Formatter" "Форматирование в JSON"
                 resultWriter = component "Result Writer" "Сохранение результатов в PostgreSQL"
             }
@@ -106,12 +95,6 @@ workspace {
         }
 
         // ===== СВЯЗИ =====
-
-        // OWASP → Seeder → Embedding → Qdrant
-        owasp -> securerepo.owaspSeeder.seedScript "Правила уязвимостей"
-        securerepo.owaspSeeder.htmlParser -> securerepo.owaspSeeder.seedScript "Текст правил"
-        securerepo.owaspSeeder.seedScript -> securerepo.embeddingService.bgeM3 "Текст OWASP"
-        securerepo.owaspSeeder.seedScript -> securerepo.qdrant.generalPractices "Вектора OWASP"
 
         // Internal Rules → Ingestion → Embedding → Qdrant
         internalRules -> securerepo.internalRulesIngestion.rulesClient "Страницы политик"
@@ -165,9 +148,10 @@ workspace {
         securerepo.kafka.auditTasks -> securerepo.auditWorker.kafkaConsumer "Поток задач"
         securerepo.auditWorker.dlqProducer -> securerepo.kafka.auditDlq "Ошибки обработки"
 
-        // Audit Worker → AI Layer
-        securerepo.auditWorker.generalRetriever -> securerepo.qdrant.generalPractices "Поиск OWASP"
-        securerepo.auditWorker.internalRetriever -> securerepo.qdrant.internalPolicies "Поиск политик"
+        // Audit Worker → Qdrant (internal RAG) → LLM
+        securerepo.auditWorker.internalRetriever -> securerepo.qdrant.internalPolicies "Семантический поиск политик"
+        securerepo.auditWorker.internalRetriever -> securerepo.embeddingService.bgeM3 "Эмбеддинг чанка"
+        securerepo.auditWorker.internalRetriever -> securerepo.auditWorker.analyzer "Контекст правил"
         securerepo.auditWorker.analyzer -> securerepo.guardrails.toxicityCheck "Проверка входа"
         securerepo.guardrails.toxicityCheck -> securerepo.qwen7b.analyze "Анализ кода"
         securerepo.auditWorker.resultWriter -> securerepo.postgres.auditResults "Сохранение результатов в PostgreSQL"
@@ -201,12 +185,6 @@ workspace {
 
         component securerepo.internalRulesIngestion "c3_internal_rules_ingestion" {
             description "C3 - Internal Rules Ingestion"
-            include *
-            autoLayout
-        }
-
-        component securerepo.owaspSeeder "c3_owasp_seeder" {
-            description "C3 - OWASP Seeder"
             include *
             autoLayout
         }

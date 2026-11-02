@@ -113,6 +113,7 @@ class AuditController:
             return AuditStatusResponse(
                 audit_id=audit.id,
                 repo_url=audit.repo_url,
+                branch=audit.branch or "main",
                 status=audit.status,
                 created_at=audit.created_at,
                 updated_at=audit.updated_at

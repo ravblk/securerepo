@@ -125,105 +125,104 @@ def initialize_services() -> None:
 
 
 def process_message(message, consumer) -> None:
-    """Process a single Kafka message."""
-    task: Optional[AuditTask] = None
-    audit_id: Optional[str] = None
+    """Process a single Kafka message.
 
+    Failures propagate so the consumer can retry and withhold the offset.
+    Swallowing them committed the message and dropped the chunk.
+    """
+    task_data = message.value
+    task = AuditTask(**task_data)
+
+    chunk_index = task.chunk_index or 0
+    total_chunks = task.total_chunks or 1
+    is_last_chunk = chunk_index >= total_chunks - 1
+    audit_id = task.audit_id
+
+    logger.info(f"Received task: {task.chunk_id} ({chunk_index + 1}/{total_chunks})")
+
+    if audit_id in failed_audits:
+        logger.warning(f"Skipping {task.chunk_id} - audit {audit_id} already marked as failed")
+        return
+
+    if audit_controller.should_send_auditing_status(audit_id, auditing_sent):
+        audit_controller.send_auditing_status(audit_id, chunk_index, total_chunks)
+        auditing_sent[audit_id] = True
+        failed_audits.discard(audit_id)
+        logger.info(f"Sent 'auditing' status for audit {audit_id}")
+
+    logger.info("Processing task...")
+    violations, severity = audit_controller.process_task(task)
+
+    logger.info(
+        f"Processed {task.chunk_id}, violations: {len(violations)}, "
+        f"severity: {severity}, is_last_chunk: {is_last_chunk}"
+    )
+
+    if is_last_chunk:
+        audit_controller.send_completed_status(audit_id, chunk_index, total_chunks)
+        if audit_id in auditing_sent:
+            del auditing_sent[audit_id]
+
+
+def abandon_message(message, error: str) -> None:
+    """Record a poison task and mark the audit failed after retries are exhausted."""
+    payload = message.value if isinstance(getattr(message, "value", None), dict) else {}
     try:
-        task_data = message.value
-        task = AuditTask(**task_data)
+        kafka_service.send_to_dlq(payload, error)
+    except Exception as dlq_error:
+        logger.error("Failed to write audit DLQ: %s", dlq_error)
 
-        chunk_index = task.chunk_index or 0
-        total_chunks = task.total_chunks or 1
-        is_last_chunk = chunk_index >= total_chunks - 1
-        audit_id = task.audit_id
-
-        logger.info(f"Received task: {task.chunk_id} ({chunk_index + 1}/{total_chunks})")
-
-        # Skip if audit already failed
-        if audit_id in failed_audits:
-            logger.warning(f"Skipping {task.chunk_id} - audit {audit_id} already marked as failed")
-            return
-
-        # Send initial auditing status
-        if audit_controller.should_send_auditing_status(audit_id, auditing_sent):
-            audit_controller.send_auditing_status(audit_id, chunk_index, total_chunks)
-            auditing_sent[audit_id] = True
-            failed_audits.discard(audit_id)
-            logger.info(f"Sent 'auditing' status for audit {audit_id}")
-
-        logger.info("Processing task...")
-        violations, severity = audit_controller.process_task(task)
-
-        logger.info(
-            f"Processed {task.chunk_id}, violations: {len(violations)}, "
-            f"severity: {severity}, is_last_chunk: {is_last_chunk}"
-        )
-
-        # Send completion status for last chunk
-        if is_last_chunk:
-            audit_controller.send_completed_status(audit_id, chunk_index, total_chunks)
-            # Clean up tracking
-            if audit_id in auditing_sent:
-                del auditing_sent[audit_id]
-
-    except Exception as e:
-        error_msg = f"Error in {task.chunk_id if task else 'unknown task'}: {str(e)}"
-        logger.error(error_msg)
-
-        # Send failed status if first error for this audit
-        if audit_id and audit_id not in failed_audits:
-            logger.info(f"Sending failed status for audit {audit_id}: {error_msg}")
-            audit_controller.send_failed_status(audit_id, error_msg)
-            failed_audits.add(audit_id)
-        else:
-            logger.warning(f"Skipping failed status (already sent or no audit_id)")
+    audit_id = payload.get("audit_id")
+    if audit_id and audit_id not in failed_audits:
+        if audit_controller is not None:
+            audit_controller.send_failed_status(audit_id, error)
+        failed_audits.add(audit_id)
 
 
 def consume_tasks() -> None:
-    """Main consumer loop for processing audit tasks."""
-    cycle_count = 0
-    max_cycles = 1  # Process messages only once
+    """Main consumer loop for processing audit tasks.
 
+    The offset is committed only after a successful handle, or after the task
+    is copied to the DLQ. A transient error seeks back to the same offset.
+    """
     logger.info(f"Starting to consume from topic: {settings.audit_tasks_topic}")
 
     try:
-        while cycle_count < max_cycles:
-            consumer = None
-            while consumer is None:
-                try:
-                    consumer = kafka_service.create_consumer(settings.audit_tasks_topic)
-                    logger.info("Consumer created for cycle %d/%d", cycle_count + 1, max_cycles)
-                except Exception as e:
-                    logger.error("Failed to create consumer: %s, retrying in 5 seconds...", e)
-                    time.sleep(5)
+        consumer = None
+        while consumer is None:
+            try:
+                consumer = kafka_service.create_consumer(settings.audit_tasks_topic)
+                logger.info("Consumer created")
+            except Exception as e:
+                logger.error("Failed to create consumer: %s, retrying in 5 seconds...", e)
+                time.sleep(5)
 
-            logger.info("Waiting for messages...")
-            messages_processed = 0
-            for message in consumer:
-                try:
-                    process_message(message, consumer)
-                    messages_processed += 1
-
-                    # Commit offset after successful processing with improved error handling
+        logger.info("Waiting for messages...")
+        attempts: dict[tuple, int] = {}
+        while True:
+            batches = consumer.poll(timeout_ms=1000, max_records=1)
+            for tp, messages in batches.items():
+                for message in messages:
+                    key = (tp.partition, message.offset)
                     try:
+                        process_message(message, consumer)
                         consumer.commit()
+                        attempts.pop(key, None)
                     except Exception as e:
-                        logger.warning("Failed to commit offset: %s. Message may be reprocessed.", e)
-                        # Continue processing rather than crashing - the message will be reprocessed
-                        # This is acceptable for idempotent operations
-
-                except Exception as e:
-                    logger.error("Error in consume loop: %s", e)
-                    # Don't commit on error - message will be retried
-                    if e.__class__.__name__ == 'KeyboardInterrupt':
-                        raise
-
-            logger.info("Cycle %d completed. Processed %d messages", cycle_count + 1, messages_processed)
-            consumer.close()
-            cycle_count += 1
-
-        logger.info("All processing cycles completed")
+                        attempts[key] = attempts.get(key, 0) + 1
+                        logger.error(
+                            "Error processing audit task (attempt %s/%s): %s",
+                            attempts[key],
+                            settings.max_retries,
+                            e,
+                        )
+                        if attempts[key] >= settings.max_retries:
+                            abandon_message(message, str(e))
+                            consumer.commit()
+                            attempts.pop(key, None)
+                        else:
+                            consumer.seek(tp, message.offset)
+                            time.sleep(settings.retry_delay_seconds)
 
     except KeyboardInterrupt:
         logger.info("Consuming stopped by user")

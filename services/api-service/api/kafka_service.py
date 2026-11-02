@@ -36,7 +36,8 @@ class KafkaService:
             topics = [
                 NewTopic(name=settings.repo_parsed_topic, num_partitions=5, replication_factor=1),
                 NewTopic(name=settings.audit_tasks_topic, num_partitions=5, replication_factor=1),
-                NewTopic(name=settings.audit_status_topic, num_partitions=1, replication_factor=1)
+                NewTopic(name=settings.audit_status_topic, num_partitions=1, replication_factor=1),
+                NewTopic(name=settings.audit_dlq_topic, num_partitions=1, replication_factor=1),
             ]
 
             existing_topics = admin_client.list_topics()

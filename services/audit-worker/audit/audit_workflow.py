@@ -15,7 +15,6 @@ from .exceptions import WorkflowError
 from .models import AuditState
 from .langfuse_service import langfuse_service
 from .guardrails import guardrail_engine
-from .guardrails import guardrail_engine
 
 logger = logging.getLogger(__name__)
 
@@ -222,24 +221,11 @@ class AuditWorkflow:
         code = state["code"]
         file_path = state["file_path"]
         lang = state.get("lang", "python")
-        internal_rules = state["internal_rules"]
+        internal_rules = state.get("internal_rules") or []
         audit_id = state.get("audit_id")
 
-        if not internal_rules:
-            logger.info("No internal rules found, returning empty violations")
-
-            # Log to Langfuse
-            if self._current_trace and audit_id:
-                langfuse_service.create_event(
-                    trace_id=self._current_trace.id,
-                    name="analyze_code",
-                    metadata={
-                        "result": "no_rules",
-                        "reason": "internal rules empty"
-                    }
-                )
-
-            return {"violations": [], "severity": "None"}
+        # Пустой список правил — это чистый zero-shot, а не «уязвимостей нет».
+        # Раньше анализ здесь обрывался и чанк сохранялся как чистый.
 
         # Format internal rules for LLM prompt (zero-shot augmentation context)
         context_rules = []
@@ -322,10 +308,23 @@ class AuditWorkflow:
 
         try:
             llm = self._llm_service.get_llm()
-            response = llm.invoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content="Perform comprehensive security analysis and return all vulnerabilities found.")
-            ])
+            invoke_config = {}
+            if self._current_trace:
+                langfuse_callback = langfuse_service.get_callback_handler(
+                    stateful_client=self._current_trace
+                )
+                if langfuse_callback:
+                    invoke_config["callbacks"] = [langfuse_callback]
+
+            response = llm.invoke(
+                [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(
+                        content="Perform comprehensive security analysis and return all vulnerabilities found."
+                    ),
+                ],
+                config=invoke_config or None,
+            )
 
             logger.info(f"ZERO-SHOT LLM analysis completed for code chunk: {file_path}")
 
@@ -423,9 +422,10 @@ class AuditWorkflow:
             except (json.JSONDecodeError, Exception) as e:
                 logger.warning(f"Strategy 2 (JSON repair) failed: {e}")
 
-        # Strategy 3: Fallback to empty violations (graceful degradation)
-        logger.warning("All JSON parsing strategies failed, returning empty violations")
-        return [], None
+        # Не подменяем неразобранный ответ пустым списком: это выглядело бы
+        # как успешный аудит без находок. None уходит в WorkflowError.
+        logger.warning("All JSON parsing strategies failed")
+        return None, "LLM response did not contain valid JSON"
 
     def _repair_json_common_issues(self, json_str: str) -> str:
         """

@@ -32,7 +32,7 @@ class Settings:
     confluence_space_key: str = os.getenv("CONFLUENCE_SPACE_KEY", "")
 
     # Processing Configuration
-    max_workers: int = int(os.getenv("MAX_WORKERS", "1"))  # Single worker like owasp-seeder
+    max_workers: int = int(os.getenv("MAX_WORKERS", "1"))
 
     # Retry Configuration
     qdrant_max_retries: int = int(os.getenv("QDRANT_MAX_RETRIES", "5"))

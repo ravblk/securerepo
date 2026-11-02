@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from indexer.config import settings
 from indexer.embedding_service import get_embedding
+from indexer.exceptions import IndexingError
 from indexer.kafka_service import KafkaService
 from indexer.models import RepoMessage
 from indexer.qdrant_service import QdrantService
@@ -49,8 +50,8 @@ def process_repo(message: RepoMessage) -> None:
             logger.warning(f"✗ Failed to save symbols to database: {e}. Continuing without symbol context.")
 
     if not chunks:
-        logger.warning("No code chunks found, skipping embedding")
-        kafka_service.send_status(message.audit_id, "indexed", total_chunks=0)
+        logger.warning("No code chunks found, nothing to audit")
+        kafka_service.send_status(message.audit_id, "completed", total_chunks=0)
         return
 
     logger.info(f"Starting embedding process for {len(chunks)} chunks")
@@ -58,30 +59,35 @@ def process_repo(message: RepoMessage) -> None:
     for idx, chunk in enumerate(chunks):
         logger.info(f"Processing chunk {idx + 1}/{len(chunks)}: {chunk.file_path}")
         embedding = get_embedding(chunk.code)
-        if embedding:
-            embedded.append((chunk, embedding))
-            logger.info(f"✓ Got embedding for chunk {idx + 1}")
-        else:
-            logger.warning(f"✗ Failed to get embedding for chunk {idx + 1}")
+        if not embedding:
+            raise IndexingError(
+                message.audit_id,
+                f"embedding failed for chunk {idx + 1} ({chunk.file_path})",
+            )
+        embedded.append((chunk, embedding))
+        logger.info(f"✓ Got embedding for chunk {idx + 1}")
 
     logger.info(f"Embedding complete: {len(embedded)}/{len(chunks)} chunks embedded")
 
-    points = []
-    if embedded:
-        try:
-            logger.info(f"Upserting {len(embedded)} points to Qdrant")
-            points = qdrant_service.upsert_chunks(embedded, message)
-            logger.info("Indexed %d chunks to Qdrant", len(points))
-        except Exception:
-            logger.exception("Error upserting to Qdrant")
-    else:
-        logger.warning("No chunks were successfully embedded")
+    try:
+        logger.info(f"Upserting {len(embedded)} points to Qdrant")
+        points = qdrant_service.upsert_chunks(embedded, message)
+        logger.info("Indexed %d chunks to Qdrant", len(points))
+    except Exception as e:
+        raise IndexingError(message.audit_id, f"qdrant upsert failed: {e}") from e
 
-    logger.info(f"Sending audit status for {message.audit_id}")
+    if len(points) != len(embedded):
+        raise IndexingError(
+            message.audit_id,
+            "qdrant upsert returned an incomplete point set",
+        )
+
+    # Задачи публикуются до статуса indexed. Если брокер принял не все
+    # сообщения, аудит не помечается проиндексированным.
+    kafka_service.send_audit_tasks(message.audit_id, points, message.lang)
     kafka_service.send_status(
         message.audit_id, "indexed", total_chunks=len(points),
     )
-    kafka_service.send_audit_tasks(message.audit_id, points, message.lang)
     logger.info(f"Completed processing for {message.audit_id}")
 
 
@@ -106,6 +112,7 @@ def on_kafka_message(kafka_message) -> None:
         logger.info(f"Completed indexing for audit %s in {duration:.2f}s", repo_message.audit_id)
     except Exception:
         logger.exception("Error processing repo message")
+        raise
 
 
 @asynccontextmanager

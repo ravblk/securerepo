@@ -945,6 +945,7 @@
 
                 console.log('✅ Successfully decoded and parsed JWT payload');
                 console.log('📋 User ID (sub):', payload_data.sub);
+                console.log('📋 Username:', payload_data.preferred_username);
 
                 if (!payload_data.sub) {
                     console.error('❌ Token payload missing "sub" field');
@@ -953,6 +954,7 @@
 
                 const userInfo = {
                     sub: payload_data.sub,
+                    username: payload_data.preferred_username || payload_data.name || payload_data.email || payload_data.sub,
                     roles: payload_data.realm_access?.roles || []
                 };
 
@@ -1294,6 +1296,7 @@
 
                 // Сохраняем repo_url для генерации ссылок
                 window.currentRepoUrl = statusData.repo_url;
+                window.branch = statusData.branch || 'main';
 
                 if (statusData.status !== 'completed') {
                     const statusMessages = {
@@ -1306,12 +1309,13 @@
                         <h2>📊 Статус аудита</h2>
                         <div class="report-details">
                             <p><strong>🆔 Идентификатор:</strong> ${auditId}</p>
-                            <p><strong>📂 Репозиторий:</strong> ${statusData.repo_url}</p>
-                            <p><strong>📊 Статус:</strong> <span class="status status-${statusData.status}">${statusData.status}</span></p>
-                            <p><strong>📅 Создан:</strong> ${new Date(statusData.created_at).toLocaleString()}</p>
-                        </div>
-                        <div style="text-align: center; padding: 20px;">
-                            <h3>${statusMessages[statusData.status] || statusData.status}</h3>
+                    <p><strong>📂 Репозиторий:</strong> ${statusData.repo_url}</p>
+                    <p><strong>🌿 Ветка:</strong> ${escapeHtml(statusData.branch || 'main')}</p>
+                    <p><strong>📊 Статус:</strong> <span class="status status-${statusData.status}">${statusData.status}</span></p>
+                    <p><strong>📅 Создан:</strong> ${new Date(statusData.created_at).toLocaleString()}</p>
+                </div>
+                <div style="text-align: center; padding: 20px;">
+                    <h3>${statusMessages[statusData.status] || statusData.status}</h3>
                             <p style="color: #a0a0a0;">Отчёт будет доступен после завершения аудита</p>
                         </div>
                         <div class="modal-actions">
@@ -1381,6 +1385,7 @@
                 <div class="report-details">
                     <p><strong>🆔 Идентификатор:</strong> ${auditId}</p>
                     <p><strong>📂 Репозиторий:</strong> ${statusData.repo_url}</p>
+                    <p><strong>🌿 Ветка:</strong> ${escapeHtml(statusData.branch || 'main')}</p>
                     <p><strong>📊 Статус:</strong> <span class="status status-${statusData.status}">${statusData.status}</span></p>
                     <p><strong>📅 Создан:</strong> ${new Date(statusData.created_at).toLocaleString()}</p>
                     <p><strong>🔍 Всего находок:</strong> ${findings.length}</p>
@@ -1430,7 +1435,11 @@
                                         ${finding.rule_id ? `<strong>📋 Правило:</strong> ${escapeHtml(finding.rule_id)}<br>` : ''}
                                         ${finding.rule_url ? `<a href="${escapeHtml(finding.rule_url)}" target="_blank" class="rule-link">🌐 Внешний источник правила</a><br>` : ''}
                                         ${finding.file_path ? (() => {
-                                            const fileUrl = generateRepositoryUrl(window.currentRepoUrl || '', window.branch || 'main', finding.file_path);
+                                            const fileUrl = generateRepositoryUrl(
+                                                window.currentRepoUrl || statusData.repo_url || '',
+                                                statusData.branch || window.branch || 'main',
+                                                finding.file_path
+                                            );
                                             return fileUrl ? `<a href="${escapeHtml(fileUrl)}" target="_blank" class="rule-link">📂 Исходный файл: ${escapeHtml(finding.file_path)}</a>` : '';
                                         })() : ''}
                                     </div>` : ''}
@@ -1504,7 +1513,31 @@
             reportModal.style.display = 'none';
         }
 
+        let sessionRefreshInterval = null;
+
+        async function ensureSession() {
+            if (!getToken() && localStorage.getItem('refresh_token')) {
+                await refreshAccessToken();
+            } else if (tokenExpiresSoon()) {
+                await refreshAccessToken();
+            }
+        }
+
+        function startSessionKeepAlive() {
+            sessionRefreshInterval = setInterval(async () => {
+                if (tokenExpiresSoon()) {
+                    const refreshed = await refreshAccessToken();
+                    if (!refreshed && !getToken()) {
+                        redirectToLogin();
+                    }
+                }
+            }, 60000);
+        }
+
+        async function initDashboard() {
         console.log('Dashboard initialization...');
+        await ensureSession();
+
         const token = getToken();
         console.log('Token from localStorage:', !!token);
         console.log('Token length:', token ? token.length : 0);
@@ -1514,6 +1547,10 @@
         console.log('User info result:', user);
 
         if (!user) {
+            if (!getToken() && !localStorage.getItem('refresh_token')) {
+                redirectToLogin();
+                return;
+            }
             console.error('No user info found, redirecting to login');
             try {
                 const parts = token.split('.');
@@ -1550,14 +1587,18 @@
                 window.location.href = '/login';
             }, 10000);
         } else {
-            console.log('User authorized:', user.sub);
+            console.log('User authorized:', user.username);
             currentUser = user;
-            document.getElementById('userInfo').textContent = user.sub;
+            document.getElementById('userInfo').textContent = user.username;
 
             // Initialize SSE-based audit manager
             auditManager = new AuditStatusManager();
             auditManager.start();
+            startSessionKeepAlive();
         }
+        }
+
+        initDashboard();
     </script>
 </body>
 </html>

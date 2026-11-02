@@ -42,7 +42,7 @@ spec:
       #   node: node-db
       containers:
       - name: embedding
-        image: xravil/securerepo-embedding-service:v0.1.0
+        image: xravil/securerepo-embedding-service:v0.2.1-linux-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080

@@ -10,6 +10,6 @@ langchain-core
 langchain-community
 langchain-openai
 kafka-python
-langfuse
-langfuse-langchain
+langfuse>=2.60.0,<3.0.0
+langfuse-langchain>=2.60.0,<3.0.0
 langchain

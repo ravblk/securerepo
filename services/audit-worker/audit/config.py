@@ -10,6 +10,7 @@ class Settings:
     kafka_broker: str = os.getenv("KAFKA_BROKER", "kafka:9092")
     audit_tasks_topic: str = "audit.tasks"
     audit_status_topic: str = "audit.status"
+    audit_dlq_topic: str = "audit.dlq"
     audit_group: str = "audit-worker"
     kafka_timeout_seconds: int = 30
     kafka_session_timeout_ms: int = 300000  # 5 minutes to accommodate LLM processing

@@ -9,7 +9,7 @@ SecureRepo Batch Auditor — корпоративная система масс�
 - **Keycloak** — аутентификация и авторизация
 - **Langfuse** — мониторинг LLM операций
 
-Сервисы: API Service, Frontend Service, Indexer Service, Embedding Service, Internal Rules Ingestion, OWASP Seeder, Audit Worker.
+Сервисы: API Service, Frontend Service, Indexer Service, Embedding Service, Internal Rules Ingestion, Audit Worker.
 
 ## 📚 Документация
 

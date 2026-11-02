@@ -16,6 +16,7 @@ class AuditStatusResponse(BaseModel):
     """Response model for audit status."""
     audit_id: str
     repo_url: str
+    branch: str = "main"
     status: str
     created_at: datetime
     updated_at: datetime

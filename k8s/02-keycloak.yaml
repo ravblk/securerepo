@@ -7,7 +7,9 @@ metadata:
   namespace: securerepo
 data:
   KEYCLOAK_ADMIN: admin
-  KC_DB: dev-file
+  KC_DB: postgres
+  KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+  KC_DB_USERNAME: securerepo
   KC_HEALTH_ENABLED: "true"
   KC_HOSTNAME_STRICT: "false"
   KC_HTTP_ENABLED: "true"
@@ -15,19 +17,6 @@ data:
   KC_PROXY_HEADERS: "xforwarded"
   KC_SPI_LOGIN_PROTOCOL_OPENID_CONNECT_LEGACY_LOGOUT_REDIRECT_URI: "true"
   KC_SPI_COOKIE_SECURE: "false"
----
-# Keycloak PersistentVolumeClaim
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: keycloak-pvc
-  namespace: securerepo
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 2Gi
 ---
 # Keycloak Deployment
 apiVersion: apps/v1
@@ -45,25 +34,24 @@ spec:
       labels:
         app: keycloak
     spec:
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000        
       containers:
       - name: keycloak
         image: quay.io/keycloak/keycloak:24.0
         ports:
         - containerPort: 8080
           name: http
-        args: ["start-dev"]           # ИСПРАВЛЕНО: command заменен на args
+        args: ["start-dev"]
         envFrom:
         - configMapRef:
             name: keycloak-config
         - secretRef:
             name: keycloak-secret
-        volumeMounts:
-        - name: keycloak-storage
-          mountPath: /opt/keycloak/data/h2
+        env:
+        - name: KC_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
         resources:
           requests:
             cpu: 250m
@@ -87,10 +75,6 @@ spec:
           periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
-      volumes:
-      - name: keycloak-storage
-        persistentVolumeClaim:
-          claimName: keycloak-pvc
 ---
 # Keycloak Service
 apiVersion: v1

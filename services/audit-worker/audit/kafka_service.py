@@ -44,6 +44,19 @@ class KafkaService:
         """Get Kafka producer instance if initialized."""
         return self._producer
 
+    def send_to_dlq(self, payload: dict, error: str) -> None:
+        """Persist a task that exhausted retries so the offset can be committed."""
+        if not self._producer:
+            raise KafkaError("Producer not initialized, cannot write DLQ")
+        message = {"error": error, "payload": payload}
+        try:
+            self._producer.send(settings.audit_dlq_topic, value=message)
+            self._producer.flush(timeout=settings.kafka_timeout_seconds)
+            logger.info("Sent failed task to %s", settings.audit_dlq_topic)
+        except Exception as e:
+            logger.exception("Failed to send message to %s: %s", settings.audit_dlq_topic, e)
+            raise KafkaError(f"Failed to write DLQ: {e}") from e
+
     def send_message(self, topic: str, message: dict) -> None:
         """Send a message to specified Kafka topic."""
         if not self._producer:

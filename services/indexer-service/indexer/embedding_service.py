@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_embedding(text: str) -> Optional[list[float]]:
-    """Get embedding for given text, simplified like owasp-seeder."""
+    """Get embedding for given text."""
     import time
     start_time = time.time()
 

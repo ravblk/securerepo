@@ -14,6 +14,7 @@ spec:
   selector:
     app: frontend     # Убедитесь, что лейблы совпадают с лейблами в Deployment вашего Frontend
 
+---
 # Keycloak Service (LoadBalancer для внешнего доступа)
 apiVersion: v1
 kind: Service
@@ -28,3 +29,19 @@ spec:
     name: http
   selector:
     app: keycloak
+
+---
+# Langfuse (LoadBalancer для внешнего доступа)
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-lb
+  namespace: securerepo
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3090
+    targetPort: 3000
+    name: http
+  selector:
+    app: langfuse-server

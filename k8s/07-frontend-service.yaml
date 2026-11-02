@@ -12,6 +12,8 @@ data:
   BROWSER_KEYCLOAK_URL: "http://localhost:8180"
   KEYCLOAK_REALM: "securerepo"
   KEYCLOAK_CLIENT_ID: "securerepo-api"
+  # Keycloak client: Valid Redirect URIs must include http://localhost:3000/*
+  # and Web Origins http://localhost:3000 (see docs/internal/keycloak-setup.md)
 
 ---
 # Frontend Service Service
@@ -48,7 +50,7 @@ spec:
       #   node: node-app
       containers:
       - name: frontend
-        image: xravil/securerepo-frontend-service:v0.1.8
+        image: xravil/securerepo-frontend-service:v0.2.1-linux-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
@@ -56,7 +58,7 @@ spec:
         - configMapRef:
             name: frontend-config
         - secretRef:
-            name: frontend-secret
+            name: keycloak-secret
         resources:
           requests:
             cpu: 100m

@@ -95,17 +95,6 @@ class QdrantService:
 
         logger.info(f"Successfully upsert all {total_points} points to Qdrant")
 
-        try:
-            self._retry_service.execute_with_retry(
-                upsert_func,
-                name=f"upsert {len(points)} points"
-            )
-            logger.info(f"Successfully upsert {len(points)} points to Qdrant")
-        except Exception as e:
-            error_msg = f"Failed to upsert points: {e}"
-            logger.error(error_msg)
-            raise QdrantError(error_msg)
-
     def check_health(self) -> tuple[bool, str]:
         """Check Qdrant health."""
         try:

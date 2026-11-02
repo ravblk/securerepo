@@ -68,6 +68,9 @@ spec:
           value: "http://localhost:3090"
         - name: NEXTAUTH_URL
           value: "http://localhost:3090"
+        # Next.js binds to pod IP by default; port-forward uses 127.0.0.1 inside the pod
+        - name: HOSTNAME
+          value: "0.0.0.0"
         resources:
           requests:
             memory: "512Mi"

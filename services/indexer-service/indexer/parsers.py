@@ -167,35 +167,15 @@ def parse_file(file_path: Path, lang: str, audit_id: Optional[str] = None) -> tu
 
     _walk(root)
 
-    # Add audit_id to symbols
-    if audit_id:
-        for symbol in symbols:
-            symbol["audit_id"] = audit_id
-
-    return chunks, symbols
-
-    # Fallback: файл без функций не должен молча исчезать из аудита
-    if not chunks:
+    # Файлы без функций и top-level assignment раньше отбрасывались:
+    # return стоял выше этого fallback, и код не попадал в аудит.
+    if not chunks and content.strip():
         code, _ = _cut_at_line_boundary(content, settings.max_code_length)
-        _emit(chunks, file_path, code, 1, None)
+        if code.strip():
+            _emit(chunks, file_path, code, 1, None)
 
-    # Add audit_id to symbols and log extraction results
     if audit_id:
         for symbol in symbols:
             symbol["audit_id"] = audit_id
 
-    # Debug logging for symbols collection
-    if symbols:
-        logger.info(f"✓ Extracted {len(symbols)} symbols from {file_path.name}")
-        if len(symbols) <= 3:
-            for i, sym in enumerate(symbols):
-                logger.info(f"  Symbol {i+1}: {sym.get('symbol', 'unknown')} ({sym.get('symbol_type', 'unknown')}) at line {sym.get('start_line', 0)}")
-        else:
-            for i, sym in enumerate(symbols[:3]):
-                logger.info(f"  Symbol {i+1}: {sym.get('symbol', 'unknown')} ({sym.get('symbol_type', 'unknown')}) at line {sym.get('start_line', 0)}")
-            logger.info(f"  ... and {len(symbols) - 3} more symbols")
-    else:
-        logger.info(f"✗ No symbols extracted from {file_path.name}")
-
-    logger.info(f"📊 File parsing: {len(chunks)} chunks, {len(symbols)} symbols")
     return chunks, symbols

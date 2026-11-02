@@ -7,6 +7,7 @@ from qdrant_client.models import PointStruct
 
 from .config import settings
 from .models import Page
+from .point_ids import policy_point_id
 from .qdrant_service import QdrantService
 from .content_service import ContentService
 from .embedding_service import EmbeddingService
@@ -133,9 +134,9 @@ class SyncController:
                     logger.warning(f"Failed to get embedding for chunk {chunk_idx}")
                     continue
 
-                # Generate unique point ID based on page ID and chunk index
-                # Ensure ID is an integer (Qdrant requires consistent type)
-                point_id = int(str(page_id) + str(chunk_idx).zfill(2))
+                # Integer id packed as page * 1_000_000 + chunk.
+                # Concatenation aliased (1, 234) and (12, 34) to the same point.
+                point_id = policy_point_id(page_id, chunk_idx)
 
                 # Create point
                 point = PointStruct(

@@ -5,7 +5,6 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 
 from .config import settings
-from .langfuse_service import langfuse_service
 from .exceptions import LLMConnectionError
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,7 @@ class LLMService:
         self._llm: Optional[ChatOpenAI] = None
 
     def get_llm(self) -> ChatOpenAI:
-        """Get or create LLM instance with Langfuse callback handler."""
+        """Get or create LLM instance (Langfuse callbacks are attached per workflow trace in audit_workflow)."""
         if self._llm is None:
             if not settings.OAPI_MODELS_URL or not settings.OAPI_MODELS_URL.strip():
                 raise LLMConnectionError("OAPI_MODELS_URL is empty or not set")
@@ -26,15 +25,6 @@ class LLMService:
             api_key = settings.OAPI_API_KEY if settings.OAPI_API_KEY else "none"
 
             try:
-                # Get Langfuse callback handler for automatic LLM tracing
-                langfuse_callback = langfuse_service.get_callback_handler()
-
-                # Build callbacks list with Langfuse handler if available
-                callbacks = []
-                if langfuse_callback:
-                    callbacks.append(langfuse_callback)
-                    logger.info("Langfuse callback attached to LLM")
-
                 self._llm = ChatOpenAI(
                     model=settings.llm_model,
                     api_key=api_key,
@@ -42,7 +32,6 @@ class LLMService:
                     temperature=settings.llm_temperature,
                     timeout=settings.llm_timeout,
                     max_retries=settings.llm_max_retries,
-                    callbacks=callbacks if callbacks else None,
                 )
                 logger.info(f"LLM initialized: {settings.llm_model}")
             except Exception as e:

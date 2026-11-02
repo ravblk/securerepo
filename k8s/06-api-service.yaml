@@ -46,7 +46,7 @@ spec:
       #   node: node-app
       containers:
       - name: api
-        image: xravil/securerepo-api-service:v0.1.8
+        image: xravil/securerepo-api-service:v0.2.1-linux-amd64
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
@@ -67,7 +67,7 @@ spec:
         - name: KEYCLOAK_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
-              name: frontend-secret
+              name: keycloak-secret
               key: KEYCLOAK_CLIENT_SECRET
         resources:
           requests:

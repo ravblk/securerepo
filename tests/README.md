@@ -2,7 +2,7 @@
 
 Скрипт берёт `OAPI_MODELS_URL` и `OAPI_API_KEY` так же, как
 `services/audit-worker/audit/config.py`, и вызывает модель `zai-org/GLM-4.7`.
-Каждый файл из `services/owasp-seeder/tests/fixtures/vulnerable_code/` уходит
+Каждый файл из `tests/fixtures/vulnerable_code/` уходит
 в тот же промпт, что и шаг анализа воркера. Находки сравниваются с эталоном
 `tests/fixtures/vulnerable_code_ground_truth.yaml`.
 

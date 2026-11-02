@@ -5,7 +5,6 @@ Service for Qdrant vector database operations with basic semantic search.
 import logging
 from typing import List, Optional
 
-import numpy as np
 from qdrant_client import QdrantClient
 
 from .config import settings
@@ -26,51 +25,6 @@ class QdrantService:
     def get_client(self) -> QdrantClient:
         """Get the Qdrant client instance."""
         return self._client
-
-    def _process_search_point(self, point, embedding: List[float], lang: Optional[str] = None) -> Optional[dict]:
-        """Process a search point with language filtering and similarity calculation."""
-        payload = point.payload
-
-        # Skip points without required fields
-        if not all(key in payload for key in ["title", "text"]):
-            return None
-
-        # Language filter if provided
-        if lang is not None:
-            point_lang = payload.get("lang", "").lower()
-            if point_lang and point_lang != lang.lower():
-                # Allow English rules for all languages
-                if point_lang != "en":
-                    return None
-
-        # Extract vector if available
-        if hasattr(point, 'vector') and point.vector:
-            point_vector = point.vector
-        else:
-            return None
-
-        # Calculate cosine similarity
-        embedding_array = np.array(embedding)
-        point_vector_array = np.array(point_vector)
-
-        dot_product = np.dot(embedding_array, point_vector_array)
-        norm_a = np.linalg.norm(embedding_array)
-        norm_b = np.linalg.norm(point_vector_array)
-
-        if norm_a == 0 or norm_b == 0:
-            similarity = 0.0
-        else:
-            similarity = dot_product / (norm_a * norm_b)
-
-        return {
-            "rule_id": payload.get("rule_id", payload.get("title", "")),
-            "title": payload.get("title", ""),
-            "text": payload.get("text", ""),
-            "url": payload.get("url", ""),
-            "category": payload.get("category", ""),
-            "similarity": similarity,
-            "lang": payload.get("lang", "")
-        }
 
     def format_search_result(self, result: dict) -> dict:
         """Format search result for response."""
@@ -119,43 +73,59 @@ class QdrantService:
             logger.debug("Returning empty list instead of raising error for graceful degradation")
             return []
 
+    def _matches_language(self, payload: dict, lang: Optional[str]) -> bool:
+        """Keep rules for this language, English, or rules with no language tag."""
+        if lang is None:
+            return True
+        point_lang = (payload.get("lang") or "").lower()
+        if not point_lang:
+            return True
+        return point_lang in {lang.lower(), "en"}
+
     def _search_internal_rules_basic(
         self,
         embedding: List[float],
         lang: Optional[str] = None,
         limit: int = 3
     ) -> List[dict]:
-        """Basic semantic search for internal security policies."""
+        """Nearest-neighbour search over internal_policies.
+
+        scroll() only reads the first page of the collection and then ranks
+        that page, so the relevant rules are missed whenever they are not
+        stored at the head of the collection.
+        """
         try:
-            points_data = self._client.scroll(
-                collection_name="internal_policies",
-                limit=limit * 2,  # Получаем больше правил для ранжирования
+            fetch_limit = max(limit * 10, 30)
+            hits = self._client.search(
+                collection_name=self._collection_name,
+                query_vector=embedding,
+                limit=fetch_limit,
                 with_payload=True,
-                with_vectors=True
             )
 
-            # Filter internal rules
             internal_rules_points = []
-            for point in points_data[0]:
-                # Skip points without basic fields
-                payload = point.payload
+            for hit in hits:
+                payload = hit.payload or {}
                 if not all(key in payload for key in ["title", "text"]):
                     continue
-
-                # Process search point with language filtering
-                processed_point = self._process_search_point(point, embedding, lang)
-                if processed_point:
-                    internal_rules_points.append(processed_point)
+                if not self._matches_language(payload, lang):
+                    continue
+                internal_rules_points.append({
+                    "rule_id": payload.get("rule_id", payload.get("title", "")),
+                    "title": payload.get("title", ""),
+                    "text": payload.get("text", ""),
+                    "url": payload.get("url", ""),
+                    "category": payload.get("category", ""),
+                    "similarity": float(getattr(hit, "score", 0.0) or 0.0),
+                    "lang": payload.get("lang", ""),
+                })
 
             logger.info(
-                f"Internal rules search: {len(points_data[0])} total points, "
+                f"Internal rules search: {len(hits)} nearest hits, "
                 f"{len(internal_rules_points)} valid internal rules"
             )
 
-            # Sort by similarity and return top results
-            internal_rules_points.sort(key=lambda x: x['similarity'], reverse=True)
             top_rules = internal_rules_points[:limit]
-
             self._log_search_results(top_rules, "internal rules semantic")
 
             return [

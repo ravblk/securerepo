@@ -18,7 +18,6 @@ SecureRepo Auditor — система семантического поиска 
 - **API Service** — REST API для взаимодействия с системой
 - **Frontend Service** — веб-интерфейс
 - **Internal Rules Ingestion** — сервис импорта внутренних правил
-- **OWASP Seeder** — сервис загрузки OWASP правил
 - **Indexer Service** — сервис индексации репозиториев
 - **Audit Worker** — воркер аудита кода (зависит от Ollama)
 
@@ -64,7 +63,7 @@ kubectl apply -f k8s/secrets-example/
 
 **Создаваемые секреты:**
 - `postgres-secret` — учетные данные PostgreSQL `POSTGRES_PASSWORD` и `POSTGRES_URL`
-- `frontend-secret` — Keycloak client secrets  `KEYCLOAK_CLIENT_SECRET`
+- `keycloak-secret` — Keycloak client secrets  `KEYCLOAK_CLIENT_SECRET`
 - `embedding-secret` — HuggingFace token для модели эмбеддингов `HF_TOKEN`
 - `OAPI-Secret` - api key для дооступа к llm `OAPI_TOKEN` , `OAPI_MODELS_URL`
 
@@ -75,6 +74,19 @@ kubectl apply -f k8s/secrets-example/
 ```bash
 kubectl apply -f k8s/01-postgres.yaml
 ```
+
+При старте PostgreSQL создаёт только базу `securerepo` (`POSTGRES_DB`). Базы для Keycloak и Langfuse в этом же инстансе нужно создать до запуска этих сервисов:
+
+```bash
+kubectl -n securerepo exec deploy/postgres -- \
+  psql -U securerepo -d securerepo -c "CREATE DATABASE keycloak;"
+
+kubectl -n securerepo exec deploy/postgres -- \
+  psql -U securerepo -d securerepo -c "CREATE DATABASE langfuse;"
+```
+
+- Keycloak подключается к базе `keycloak` пользователем `securerepo` (пароль из `postgres-secret`).
+- Langfuse подключается к базе `langfuse`. В секрете `langfuse-secrets` ключ `DATABASE_URL` должен быть вида `postgresql://securerepo:<пароль>@postgres:5432/langfuse`.
 
 #### 3.2 Qdrant (Векторная база)
 
@@ -94,10 +106,13 @@ kubectl apply -f k8s/04-kafka.yaml
 ```bash
 kubectl apply -f k8s/02-keycloak.yaml
 ```
-##### 3.4.1 Keycloak создать клиента 
+
+##### 3.4.2 Keycloak создать realm `securerepo`(при необходимости) и клиента
 
    - **Client ID**: `securerepo-api`
    - **Client Protocol**: `openid-connect`
+
+Нужно обновить секреты kubectl apply -f k8s/secrets/kc-secrets.yaml
 
 #### 3.5 Ollama (LLM-сервер)
 
@@ -143,28 +158,29 @@ kubectl apply -f k8s/07-frontend-service.yaml
 kubectl apply -f k8s/08-internal-rules-ingestion.yaml
 ```
 
-#### 5.4 OWASP Seeder
-
-```bash
-kubectl apply -f k8s/09-owasp-seeder.yaml
-```
-
-Этот сервис автоматически загружает OWASP правила в систему.
-
-#### 5.5 Indexer Service
+#### 5.4 Indexer Service
 
 ```bash
 kubectl apply -f k8s/10-indexer-service.yaml
 ```
 
-#### 5.6 Langfuse
+#### 5.5 Langfuse
 
 ```bash
 kubectl apply -f k8s/11-langfuse.yaml
 ```
 
-Так же нужно создать БД для langfuse в Postgresql
+База `langfuse` создаётся на шаге 3.1. `DATABASE_URL` в `langfuse-secrets` должен указывать на неё.
+
 Создать клиента который будет подключаться к Langfuse из Audit Worker
+
+Нужно создать проект и ключи доступа к нему и прописать их в секрете
+`SECUREREPO_PUBLIC_KEY` (значение `pk-lf-...`), `SECUREREPO_SECRET_KEY` (значение `sk-lf-...`).
+В `12-audit-worker.yaml` они мапятся в `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` без перестановки.
+
+```bash
+kubectl apply -f k8s/secrets/langfuse-secrets.yaml
+```
 
 #### 5.6 Audit Worker
 
@@ -222,9 +238,9 @@ kubectl delete -f k8s/
 kubectl delete namespace securerepo
 ```
 
-## Как запустить модель на vLLM 
+## Как запустить модель на vLLM
 
-Важный нюанс: **vLLM официально поддерживает GGUF** начиная с версий 0.4.x+ и 0.5.x+, но делает это через движок `llamafile`. Однако vLLM работает **гораздо быстрее и стабильнее** с форматами `AWQ` или `GPTQ`, а также с нативным `fp16/bf16`. 
+Важный нюанс: **vLLM официально поддерживает GGUF** начиная с версий 0.4.x+ и 0.5.x+, но делает это через движок `llamafile`. Однако vLLM работает **гораздо быстрее и стабильнее** с форматами `AWQ` или `GPTQ`, а также с нативным `fp16/bf16`.
 
 Если вы принципиально хотите использовать именно GGUF, команда будет такой:
 

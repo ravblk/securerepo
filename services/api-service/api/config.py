@@ -10,6 +10,7 @@ class Settings:
     repo_parsed_topic: str = "repo.parsed"
     audit_tasks_topic: str = "audit.tasks"
     audit_status_topic: str = "audit.status"
+    audit_dlq_topic: str = "audit.dlq"
 
     # Qdrant Configuration
     qdrant_url: str = os.getenv("QDRANT_URL", "http://qdrant:6333")
