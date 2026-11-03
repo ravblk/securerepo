@@ -37,7 +37,7 @@
 
 При запуске через lifespan контекст автоматически:
 - Создаёт таблицы в PostgreSQL (таблица `audits`)
-- Создаёт коллекции в Qdrant (`internal_policies`, `general_best_practices`, `code_repo`)
+- Создаёт коллекции в Qdrant (`internal_policies`, `code_repo`)
 - Создаёт топики в Kafka (`repo.parsed`, `audit.tasks`, `audit.status`)
 - Запускает consumer для прослушивания `audit.status`
 

@@ -54,7 +54,6 @@ class Settings:
         if self.qdrant_collections is None:
             object.__setattr__(self, 'qdrant_collections', frozenset({
                 "internal_policies",
-                "general_best_practices",
                 "code_repo"
             }))
 

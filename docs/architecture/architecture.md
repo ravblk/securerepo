@@ -120,7 +120,6 @@ CREATE INDEX idx_audit_results_audit_id ON audit_results(audit_id);
 
 ```
 [Confluence API] --> [Ingestion Service] --> [Qdrant: internal_policies]
-[Static DB]      --> [Seed]              --> [Qdrant: general_best_practices]
 [Git Repo]       --> [Indexer]           --> [Qdrant: code_repo]
                                                               |
 [User API: Start Audit] ------------------------------------>|

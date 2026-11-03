@@ -25,7 +25,6 @@ SecureRepo Batch Auditor использует RAG для поиска полит
 |------------|--------|------------------|
 | Текст (Confluence) | BAAI/bge-m3 | internal_policies |
 | Код | BAAI/bge-m3 | code_repo |
-| OWASP/CWE | BAAI/bge-m3 | general_best_practices |
 
 Обоснование:
 1. **Универсальность**: Одна модель для кода и текста — упрощает инфраструктуру

@@ -479,7 +479,6 @@ class AuditWorkflow:
         violations = state["violations"]
         lang = state.get("lang", "python")
         audit_id = state.get("audit_id")
-        general_rules = state.get("general_rules", [])  # Internal rules for context only
         internal_rules = state.get("internal_rules", [])
 
         # Grounding validation: ensure vulnerable lines exist in code
@@ -504,11 +503,10 @@ class AuditWorkflow:
             logger.info(f"Zero-shot CWE validation: removed {removed_cwe_format} violations with invalid CWE format")
 
         # Apply comprehensive guardrails for zero-shot results
-        all_available_context = general_rules + internal_rules
         filtered_violations, guardrail_results = guardrail_engine.validate_output(
             violations=validated_cwe_violations,
             code=code,
-            available_rules=all_available_context,  # Use as context, not strict matching
+            available_rules=internal_rules,
             strict_mode=False  # Zero-shot should be more permissive
         )
 
