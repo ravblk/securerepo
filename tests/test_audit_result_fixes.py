@@ -193,9 +193,8 @@ def test_invalid_llm_json_is_an_error():
         })
 
 
-def test_qdrant_failure_does_not_mark_indexed():
+def test_indexer_publishes_tasks_without_qdrant():
     main = _load_indexer_app()
-    from indexer.exceptions import IndexingError
     from indexer.models import CodeChunk, RepoMessage
 
     message = RepoMessage(
@@ -214,17 +213,16 @@ def test_qdrant_failure_does_not_mark_indexed():
     )
     main.clone_repo = lambda *args, **kwargs: Path("/tmp/repo")
     main.collect_chunks = lambda *args, **kwargs: ([chunk], [])
-    main.get_embedding = lambda text: [0.1]
-    main.qdrant_service = MagicMock()
-    main.qdrant_service.upsert_chunks.side_effect = RuntimeError("qdrant down")
     main.kafka_service = MagicMock()
 
-    with pytest.raises(IndexingError) as caught:
-        main.process_repo(message)
+    main.process_repo(message)
 
-    assert caught.value.audit_id == "audit-1"
-    main.kafka_service.send_status.assert_not_called()
-    main.kafka_service.send_audit_tasks.assert_not_called()
+    main.kafka_service.send_audit_tasks_from_chunks.assert_called_once_with(
+        "audit-1", [chunk], "python",
+    )
+    main.kafka_service.send_status.assert_called_once_with(
+        "audit-1", "indexed", total_chunks=1,
+    )
 
 
 def test_empty_repo_completes_instead_of_indexed_with_zero_tasks():

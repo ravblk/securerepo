@@ -54,7 +54,7 @@ class Settings:
         if self.qdrant_collections is None:
             object.__setattr__(self, 'qdrant_collections', frozenset({
                 "internal_policies",
-                "code_repo"
+                # "code_repo",  # disabled — indexer does not write code vectors yet
             }))
 
 

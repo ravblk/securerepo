@@ -58,6 +58,7 @@ class QdrantService:
         chunks: Iterable[tuple[CodeChunk, list[float]]],
         message: RepoMessage,
     ) -> list[PointStruct]:
+        """Write code chunks to code_repo — disabled in indexer main until read path exists."""
         points: list[PointStruct] = []
         for chunk, embedding in chunks:
             points.append(PointStruct(

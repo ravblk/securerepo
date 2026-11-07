@@ -60,6 +60,46 @@ class KafkaService:
         except Exception as e:
             logger.exception("Failed to send status for audit %s: %s", audit_id, e)
 
+    def send_audit_tasks_from_chunks(
+        self,
+        audit_id: str,
+        chunks: list,
+        lang: str = "python",
+    ) -> int:
+        """Publish audit tasks from parsed chunks (no Qdrant payload required)."""
+        if not self._producer:
+            raise KafkaPublishError(audit_id, "Producer not initialized")
+        total = len(chunks)
+        futures = []
+        for i, chunk in enumerate(chunks):
+            task = {
+                "chunk_id": chunk.id,
+                "code": chunk.code,
+                "file_path": chunk.file_path,
+                "audit_id": audit_id,
+                "lang": lang,
+                "chunk_index": i,
+                "total_chunks": total,
+            }
+            try:
+                futures.append(self._producer.send(
+                    settings.audit_tasks_topic,
+                    value=task,
+                    key=audit_id.encode("utf-8"),
+                ))
+            except Exception as e:
+                raise KafkaPublishError(
+                    audit_id, f"Failed to send audit task {i}: {e}"
+                ) from e
+        try:
+            self._producer.flush()
+            for i, future in enumerate(futures):
+                future.get(timeout=30)
+        except Exception as e:
+            raise KafkaPublishError(audit_id, f"Failed to flush audit tasks: {e}") from e
+        logger.info("Sent %d audit tasks for audit %s", total, audit_id)
+        return total
+
     def send_audit_tasks(self, audit_id: str, points: list, lang: str = "python") -> int:
         """Send audit tasks to Kafka for processing.
 
